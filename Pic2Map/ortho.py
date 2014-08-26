@@ -290,6 +290,7 @@ class viewOrtho_class(QGLWidget):
         color =  [0.0, 0.0,0.0,0.0]
 
         glBindTexture(GL_TEXTURE_2D, 0)
+        self.resolution = self.numpy_verts[0,2]-self.numpy_verts[1,2]
         self.maximum = max(self.numpy_verts[:,1])
         self.numpy_texture = array(self.texture, dtype=float32)
         self.m_indices= array(self.m_indices,dtype=uint32)

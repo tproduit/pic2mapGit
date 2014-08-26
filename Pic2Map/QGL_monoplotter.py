@@ -21,6 +21,7 @@ from OpenGL.arrays import ArrayDatatype as ADT
 
 class QGLMonoplotter(QGLWidget):
     blow = pyqtSignal(list)
+    pinkCrossSignal = pyqtSignal(list)
     def __init__(self, pointBuffer, picture_name, ParamPose, parent = None):
         super(QGLMonoplotter, self).__init__(parent)
         self.pos = ParamPose[0]
@@ -57,7 +58,26 @@ class QGLMonoplotter(QGLWidget):
         self.notUpdate = True
         self.symbolParamPolygon = []
         self.colorPolygon = []
+        self.setMouseTracking(True)
+        self.drawPurpleCross = False
         
+    def purpleCross(self,x,y,z):
+        if isinstance(y,(float,int,long)):
+            winx, winy, winz = gluProject(x,y,z,self.modelview,self.projection,self.viewport)
+            if winx > 0 and winx < self.l_x and winy > 0 and winy < self.l_y and winz < 0.9999:
+                z_buff = glReadPixels( winx, winy, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT)
+                # Check if the reprojection is not too close (if the point is behind a mountain)
+                if (winz-z_buff)/sqrt(1-winz) < 0.01:
+                    self.purpleX = winx/self.l_x
+                    self.purpleY = winy/self.l_y
+                else:
+                    self.purpleX = -1
+                    self.purpleY = -1     
+            else:
+               self.purpleX = -1
+               self.purpleY = -1        
+            self.drawPurpleCross = True   
+            return
         
     def lineEditBufferAppend(self):
         self.lineEditBuffer.append((self.currentEditX/self.l_x,self.currentEditY/self.l_y))
@@ -97,6 +117,26 @@ class QGLMonoplotter(QGLWidget):
                  if z != 1.0:
                     # If the click is done out of the DEM (above horizon), z is equal to 1.0
                     self.blow.emit([-result[0],result[2], event.button()])
+
+    def leaveEvent(self, event):
+         self.pinkCrossSignal.emit([0,0,0])
+         
+    def enterEvent(self, event):
+        self.inside = True
+                    
+    def mouseMoveEvent(self,event):
+         x = event.x()
+         self.currentEditX = x
+         y = float(self.viewport[3]) -event.y()
+         self.currentEditY = y
+         z = 0.0
+         z = glReadPixels( x, y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT)
+         result = gluUnProject( x, y, z, self.modelview, self.projection, self.viewport)
+         if z != 1.0:
+            # If the click is done out of the DEM (above horizon), z is equal to 1.0
+            self.pinkCrossSignal.emit([-result[0],result[2],1])
+         else :
+             self.pinkCrossSignal.emit([0,0,0])
                  
     
     def pointRefresh(self, pointArrayXYZ, SizeColorArray, zBuffer, attributeTest,  labels):
@@ -341,6 +381,13 @@ class QGLMonoplotter(QGLWidget):
          glLoadIdentity()
          
          if not self.notUpdate:
+             if self.drawPurpleCross:
+                 glPointSize(10)
+                 Color = array((220,120,220))/255.0
+                 glColor3f(Color[0], Color[1], Color[2])
+                 glBegin(GL_POINTS)
+                 glVertex2f(self.purpleX,self.purpleY)
+                 glEnd()
              counter = -1
              PointCounter = -1
              LineCounter = -1

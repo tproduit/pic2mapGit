@@ -23,8 +23,8 @@ class Initialization_dialog(QtGui.QDialog):
         self.ui.setupUi(self)
         self.center()
         
-        self.ui.lineEdit.setText("C:/Users/Gillian/Desktop/dataTest/07861v.jpg")
-        self.ui.lineEditDEM.setText("C:/Users/Gillian/Desktop/dataTest/AletschGlacierDEM.tiff")
+        self.ui.lineEdit.setText("")
+        self.ui.lineEditDEM.setText("")
         self.ui.checkBox.setChecked(False)
         self.ui.lineEdit_2.setText("") 
              

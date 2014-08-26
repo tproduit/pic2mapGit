@@ -39,6 +39,8 @@ from osgeo import gdal, osr
 class MonoplotterMainWindow(QtGui.QMainWindow):
     openOrtho = pyqtSignal()
     clearMapTool= pyqtSignal()
+    closingMonoplot = pyqtSignal()
+    
     def __init__(self, iface, pointBuffer, picture_name, ParamPose, dem_box, cLayer,pathToData, crs,demName,isFrameBufferSupported):
         QtGui.QMainWindow.__init__(self)
         self.iface = iface
@@ -84,6 +86,7 @@ class MonoplotterMainWindow(QtGui.QMainWindow):
         self.ui.measure3D.toggled.connect(self.startMeasure3D)
         self.isMeasuring3D = False
         
+        
     def activatePolygonVisualization(self):
         if self.polygonActivated == False:
             self.polygonActivated = True
@@ -105,14 +108,16 @@ class MonoplotterMainWindow(QtGui.QMainWindow):
         folder = path.replace("\\","/")
         self.qgl_window = None
         self.layerPolygonClipped = None
-        for the_file in os.listdir(folder):
-            file_path = os.path.join(folder, the_file)
-            file_path = file_path.replace("\\","/")
-            try:
-                if os.path.isfile(file_path):
-                    os.unlink(file_path)
-            except Exception, e:
-                print e
+        self.closingMonoplot.emit()
+        if os.path.isdir(folder):
+            for the_file in os.listdir(folder):
+                file_path = os.path.join(folder, the_file)
+                file_path = file_path.replace("\\","/")
+                try:
+                    if os.path.isfile(file_path):
+                        os.unlink(file_path)
+                except Exception, e:
+                    print e
         
     def startMeasure3D(self, state):
         if state == False:
@@ -700,7 +705,18 @@ class MonoplotterMainWindow(QtGui.QMainWindow):
             fieldDef = featureDefn.GetFieldDefn(i)
             name = fieldDef.GetName()
             out_feat.SetField(name, field_value[i])
-        out_lyr.CreateFeature(out_feat) 
+        out_lyr.CreateFeature(out_feat)
+        
+    def preparePurpleCross(self,x,y):
+        dataProvider =  self.cLayer.dataProvider()
+        ident = dataProvider.identify(QgsPoint(x,y),QgsRaster.IdentifyFormatValue).results()
+        value = ident.get(1)
+        self.qgl_window.purpleCross(-x,value,y)
+        self.qgl_window.notUpdate = False
+        self.qgl_window.updateGL()
+        self.qgl_window.notUpdate = True
+        
+        
         
     def refreshLayers(self, boolSymbology = False):
         self.qgl_window.notUpdate = True

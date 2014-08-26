@@ -209,6 +209,20 @@ class Pic2Map:
       self.monoplotter.qgl_window.blow.connect(self.clickOnMonoplotter)
       self.monoplotter.ui.measureButton.clicked.connect(self.activateMeasurement)
       self.monoplotter.clearMapTool.connect(self.clearMapTool)
+      self.activeFlackOnMonoplotter()
+
+  def drawPinkCross(self, pos):
+        if hasattr(self, 'pinkCross'):
+            self.canvas.scene().removeItem(self.pinkCross)
+        if pos[2] == 1:
+            self.pinkCross = QgsVertexMarker(self.canvas)
+            posi = QgsPoint(pos[0],pos[1])
+            self.pinkCross.setCenter(posi)
+            self.pinkCross.setColor(QColor(255, 122, 255))
+            self.pinkCross.setIconSize(10)
+            self.pinkCross.setIconType(QgsVertexMarker.ICON_CROSS)
+            self.pinkCross.setPenWidth(10)
+      
 
   def clearMapTool(self):
         #Call when GCP window is closed
@@ -408,7 +422,25 @@ class Pic2Map:
       # This function is used for calling the measuring tool from the monoplotter
       self.iface.actionMeasure().trigger()
       self.monoplotter.stopMeasure3D()
+      
+  def disactiveFlackOnMonoplotter(self):
+      self.canvas.mapTool().canvasMoveEvent = None
+      self.canvas.mapTool().deactivate()
+      self.canvas.unsetMapTool(self.canvas.mapTool())
+
+
+  def activeFlackOnMonoplotter(self):
+      self.clickTool2 = QgsMapToolEmitPoint(self.canvas)
+      self.canvas.setMapTool(self.clickTool2)
+      self.canvas.mapTool().canvasMoveEvent = self.test3
+      self.monoplotter.qgl_window.pinkCrossSignal.connect(self.drawPinkCross)
+      self.monoplotter.closingMonoplot.connect(self.disactiveFlackOnMonoplotter)
     
+  def test3(self, ev):
+      x,y = self.CanvastoWorldCoordinates(ev.x(), ev.y())
+      self.monoplotter.preparePurpleCross(x,y)
+
+
   def WorldToPixelOfCanvasCoordinates(self,x,y):
       # This function is called in "clickOnMonoplotter".
       # It convert CSR coordinates (world) into the screen coordinates for a given point in the canvas.
@@ -418,6 +450,16 @@ class Pic2Map:
       u = int((x-canvasBox[0])/UPP)
       v = int((canvasBox[3]-y)/UPP)
       return (u,v)
+  
+  def CanvastoWorldCoordinates(self,u,v):
+      # This function is called in "clickOnMonoplotter".
+      # It convert CSR coordinates (world) into the screen coordinates for a given point in the canvas.
+      canvasExtent =  self.canvas.extent()
+      canvasBox =  [canvasExtent.xMinimum(), canvasExtent.yMinimum(), canvasExtent.xMaximum(), canvasExtent.yMaximum()]
+      UPP = self.canvas.mapUnitsPerPixel()
+      x = int(u*UPP+canvasBox[0])
+      y = int(-v*UPP+canvasBox[3])
+      return (x,y)
   
   def setCanvasExtent(self, pos):
       # This function is used for GCP digitalization.

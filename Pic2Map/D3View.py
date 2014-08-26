@@ -331,7 +331,7 @@ class D3_view(QGLWidget):
                          glVertex3f(  x+x0, y+y0, z+z0)
                      glEnd()
     
-             glColor3f(   1.0,  1.0, 1.0 )
+             glColor3f(1.0,  1.0, 1.0 )
              
              self.modelview = []
              self.projection = []
@@ -441,7 +441,7 @@ class D3_view(QGLWidget):
             x = xyz[0]
             y = xyz[1]
             z = xyz[2]
-            winz = glReadPixels( u, v, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT)
+            winz = glReadPixels(u, v, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT)
             if winz == 1.0:
                 result.append(-1)
             else:

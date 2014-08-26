@@ -181,7 +181,7 @@ class GetGCPMainWindow(QMainWindow):
         # indice for fixed or free parameters for pose estimation
         self.whoIsChecked = [True, False]*7
         self.ui.statusbar.showMessage('Need at least 6 GCP for pose estimation')
-        
+                
     def saveAsKML(self):
         # Save the pose in KML file. It can be open in googleEarth
         if self.pos != None:
@@ -327,7 +327,7 @@ class GetGCPMainWindow(QMainWindow):
             exifInfo.show()
             result = exifInfo.exec_()
 
-        except IOError:
+        except:
             QMessageBox.warning(QWidget(), "Read - Error","Failed to load EXIF information.\nPicture may not have meta-data" )
             
     
@@ -493,11 +493,11 @@ class GetGCPMainWindow(QMainWindow):
         size[1] = resolution.height()/2
         size[0] = int(self.sizePicture[0]/float(self.sizePicture[1])*size[1])
         
-        self.refineViewQGL = D3_view(self.pointBuffer, None, self.roll, self.FOV, 50, self.pos, self.lookat, True, [size[0],size[1]])
+        self.refineViewQGL = D3_view(self.pointBuffer, None, self.roll, self.FOV, 0, self.pos, self.lookat, True, [size[0],size[1]])
         self.refineViewQGL.resize(size[0],size[1])
         self.refineViewQGL.updateGL()
-        #self.refineViewQGL.show()
-
+        self.refineViewQGL.show()
+        self.refineViewQGL.updateGL()
         
         #Read the table of GCP, get all UV and project them
         rowCount = self.model.rowCount()
@@ -584,7 +584,7 @@ class GetGCPMainWindow(QMainWindow):
         try:
             self.refreshPictureGCP()
             self.refreshCanvasGCP()
-        except IOError, e:
+        except:
             QMessageBox.warning(self, "Icons - Error",
                     "Failed update icons: %s" % e)
         
@@ -627,7 +627,7 @@ class GetGCPMainWindow(QMainWindow):
                 self.updateLocalGCP(point.x(), point.y(), value)
             else:
                 QMessageBox.warning(self, "DEM error","Failed to select layer")
-        except IOError, e:
+        except:
             QMessageBox.warning(self, "DEM error", "Failed to get point: %s" % e)
         
     def removeGCP(self):
@@ -658,7 +658,7 @@ class GetGCPMainWindow(QMainWindow):
             try:
                 self.model.save(fSaveName)
                 self.ui.statusbar.showMessage('GCPS saved')
-            except IOError, e:
+            except:
                 QMessageBox.warning(self, "Points - Error",
                         "Failed to save: %s" % e)
             
@@ -721,7 +721,8 @@ class GetGCPMainWindow(QMainWindow):
                 self.model.reset()
                 self.refreshPictureGCP()
                 self.refreshCanvasGCP()
-            except IOError, e:
+                
+            except:
                 QMessageBox.warning(self, "GCPs - Error","Failed to load: %s" % e)
 
     def addGCP(self):

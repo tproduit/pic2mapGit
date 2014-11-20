@@ -8,14 +8,15 @@
  *                                                                         *
  ***************************************************************************/
 """
+import qgis.core
+from qgis.core import *
+from qgis.gui import *
 from PyQt4 import QtGui
 from PyQt4 import QtCore
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
-from qgis.core import *
-from qgis.gui import *
-from buffers import Buffers
 
+from buffers import Buffers
 from getGCPMainWindow import GetGCPMainWindow
 from initialization import Initialization_dialog
 from virtual3DMainWindow import Virtual3DMainWindow

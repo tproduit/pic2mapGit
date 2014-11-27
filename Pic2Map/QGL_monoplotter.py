@@ -149,6 +149,8 @@ class QGLMonoplotter(QGLWidget):
         # For each layer, we test each entity
         for x,y,z in pointArrayXYZ:
             count += 1
+            if x is None or y is None or z is None:
+                continue
             winx, winy, winz = gluProject(x,y,z,self.modelview,self.projection,self.viewport)
             # check if the projection fall inside the viewport area and if it is not too far (winz)
             if winx > 0 and winx < self.l_x and winy > 0 and winy < self.l_y and winz < 0.9999:
@@ -186,6 +188,8 @@ class QGLMonoplotter(QGLWidget):
                 x = vertex[0]
                 y = vertex[1]
                 z = vertex[2]
+                if x is None or y is None or z is None:
+                    continue
                 winx, winy, winz = gluProject(x,y,z,self.modelview,self.projection,self.viewport)
                 # check if the projection of the vertex fall inside the viewport
                 if winx > 0 and winx <= self.l_x and winy > 0 and winy < self.l_y:

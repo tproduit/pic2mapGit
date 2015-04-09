@@ -97,7 +97,7 @@ class D3_view(QtOpenGL.QGLWidget):
     def wheelEvent(self, event):
         # translate the view position in the front direction
         self.last_pos = event.pos()
-        delta = event.delta() * self.res / 5
+        delta = - event.delta() * self.res / 5
         xk = self.pos[0] - self.lookat[0]
         yk = self.pos[1] - self.lookat[1]
         zk = self.pos[2] - self.lookat[2]
@@ -117,7 +117,7 @@ class D3_view(QtOpenGL.QGLWidget):
         # When clicked on the window...
         self.last_pos = event.pos()
         modifiers = QtGui.QApplication.keyboardModifiers()
-        if(event.buttons() & Qt.LeftButton and modifiers == Qt.ControlModifier):
+        if(event.buttons() & QtCore.Qt.LeftButton and modifiers == QtCore.Qt.ControlModifier):
             #... if ctrl is pressed
             x = event.x()
             y = float(self.viewport[3]) - event.y()
@@ -129,7 +129,7 @@ class D3_view(QtOpenGL.QGLWidget):
             # emit signal to the GCP model when clicked in 3D viewer
             self.getGCPIn3DviewSignal.emit()
 
-        if(event.buttons() & Qt.LeftButton and modifiers == Qt.AltModifier):
+        if(event.buttons() & QtCore.Qt.LeftButton and modifiers == QtCore.Qt.AltModifier):
             #... if ctrl is pressed
             x = event.x()
             y = float(self.viewport[3]) - event.y()
@@ -147,16 +147,16 @@ class D3_view(QtOpenGL.QGLWidget):
         dx = event.x() - self.last_pos.x()
         dy = event.y() - self.last_pos.y()
         modifiers = QtGui.QApplication.keyboardModifiers()
-        if (event.buttons() & Qt.RightButton):
+        if (event.buttons() & QtCore.Qt.RightButton):
             # Rotate the view in axis x and y (side and vertical direction)
             self.rotateBy(dy * 2, 0, 0)
             self.rotateBy(0, 0, 2 * dx)
-        elif (event.buttons() & Qt.LeftButton & (modifiers != Qt.ControlModifier)):
+        elif (event.buttons() & QtCore.Qt.LeftButton & (modifiers != QtCore.Qt.ControlModifier)):
 
             # translate the view in axis x and y (side and vertical direction)
             self.PanBy(dx * 2, 0, 0)
             self.PanBy(0, 0, 2 * dy)
-        elif (event.buttons() & Qt.MidButton):
+        elif (event.buttons() & QtCore.Qt.MidButton):
             # translate the view in front direction (finer than wheelEvent)
             self.PanByMid(dy * 2)
         self.last_pos = event.pos()
@@ -184,14 +184,15 @@ class D3_view(QtOpenGL.QGLWidget):
         xk = self.pos[0] - self.lookat[0]
         yk = self.pos[1] - self.lookat[1]
         zk = self.pos[2] - self.lookat[2]
-        n = sqrt((xk) ** 2 + (yk) ** 2 + (zk) ** 2)
         vectPlan = cross(array([0, 1, 0]), array([xk, yk, zk]))
         vectPlan = vectPlan / linalg.norm(vectPlan)
         vectZ = cross(vectPlan, array([xk, yk, zk]))
         vectZ = vectZ / linalg.norm(vectZ)
-        deltax = x * vectPlan[0] * self.res / 5
+        deltax = x * vectPlan[0] * self.res / \
+            5 + z * vectZ[0] * self.res / 5
         deltay = z * vectZ[1] * self.res / 5
-        deltaz = x * vectPlan[2] * self.res / 5
+        deltaz = x * vectPlan[2] * self.res / \
+            5 + z * vectZ[2] * self.res / 5
 
         self.pos = [
             self.pos[0] + deltax, self.pos[1] + deltay, self.pos[2] + deltaz]

@@ -101,8 +101,5 @@ class dropedit(QtGui.QLineEdit):   # subclass
         super(dropedit, self).__init__(parent)
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
-        
-        
-    def dropEvent(self, event):
-        self.setText("Hello")
+
 

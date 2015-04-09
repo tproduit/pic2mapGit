@@ -24,25 +24,27 @@ from PyQt4.QtGui import *
 from PyQt4.QtCore import *
 from qgis.core import *
 from qgis.gui import *
-from ui_disprast import Ui_disprast
+from ..ui_disprast import Ui_disprast
 from iconsdialog import icons_dialog
 from posedialog import Pose_dialog
-import Image
-import ImageQt
-import ImageEnhance
+from PIL import Image
 import GCPs
 from numpy import arctan, arctan2, arcsin, sqrt, pi, cos, sin, array, zeros, dot, linalg, abs
 from D3View import D3_view
 
 from PyQt4 import QtXml
 from exifInfo import ExifInfo
-        
+
+
 class GetGCPMainWindow(QMainWindow):
-    # signal used for reseting the GCP digitalization tool. Slot is located in the file "Pic2Map"
+    # signal used for reseting the GCP digitalization tool. Slot is located in
+    # the file "Pic2Map"
     resetToolSignal = pyqtSignal()
-    clearMapTool2= pyqtSignal()
-    #signal used for zooming on selected GCP. Slot is located in the file "Pic2Map"
+    clearMapTool2 = pyqtSignal()
+    # signal used for zooming on selected GCP. Slot is located in the file
+    # "Pic2Map"
     setCanvasExtentSignal = pyqtSignal(tuple)
+
     def __init__(self, iface, pointBuffer, picture_name, pathToData, isFrameBufferSupported, crs):
         QMainWindow.__init__(self)
         # pointBuffer mainly contain information relative to the 3D view
@@ -55,22 +57,24 @@ class GetGCPMainWindow(QMainWindow):
         self.pathToData = pathToData
         self.isFrameBufferSupported = isFrameBufferSupported
         self.crs = crs
-        
+
         # create interface
         self.ui = Ui_disprast()
         self.ui.setupUi(self)
-        #center the window in the screen
+        # center the window in the screen
         self.center()
-        
-        # zoomFactor is used by the zoom button and wheel events for zooming in and out
+
+        # zoomFactor is used by the zoom button and wheel events for zooming in
+        # and out
         self.zoomFactor = 1
-        
-        # reprojectedCross contain the east and north value of reprojectedCrossected points
+
+        # reprojectedCross contain the east and north value of
+        # reprojectedCrossected points
         self.reprojectedCross = []
         self.poseCanvas = None
         self.canvasNumber = []
         self.canvasCross = []
-        
+
         # uvTableAll contain all u and v reprojectedCrossection value from the model.
         # uvTableActivated contain u and v reprojectedCrossection value from the model for the GCP used for pose estimation
         # There are generated at each pose estimation
@@ -78,15 +82,17 @@ class GetGCPMainWindow(QMainWindow):
         self.uvTableActivated = []
         # goToMonoplot is a flag used by closeEvent
         self.goToMonoplot = False
-        
+
         # picture_name is the landscape picture path
         self.picture_name = picture_name
         img = QImage(self.picture_name)
         self.sizePicture = [img.width(), img.height()]
-        # iconSet contain setting used for displaying GCP in canvas and in the scene
+        # iconSet contain setting used for displaying GCP in canvas and in the
+        # scene
         self.iconSet = icon_settings(self.sizePicture, self.pointBuffer.res)
-        
-        addGCPButton = QAction(QIcon(':/plugins/Pic2Map/toolbar1.png'), 'Add GCP to Table', self)
+
+        addGCPButton = QAction(
+            QIcon(':/plugins/Pic2Map/toolbar1.png'), 'Add GCP to Table', self)
         # toolbarTable contains actions in relation with GCP digitalization
         # toolbarView contains actions in relation with the 3D openGL view
         # toolbarPose contains actions in relation with the pose estimation
@@ -95,93 +101,114 @@ class GetGCPMainWindow(QMainWindow):
         self.ui.toolbarPose = self.addToolBar('Pose Actions')
         self.ui.toolbarTable.addAction(addGCPButton)
         addGCPButton.triggered.connect(self.addGCP)
-        
-        removeGCPButton = QAction(QIcon(':/plugins/Pic2Map/toolbar2.png'), 'Remove selected GCP', self)
+
+        removeGCPButton = QAction(
+            QIcon(':/plugins/Pic2Map/toolbar2.png'), 'Remove selected GCP', self)
         self.ui.toolbarTable.addAction(removeGCPButton)
         removeGCPButton.triggered.connect(self.removeGCP)
-        
-        saveGCPButton = QAction(QIcon(':/plugins/Pic2Map/toolbar3.png'), 'Save GCP', self)
+
+        saveGCPButton = QAction(
+            QIcon(':/plugins/Pic2Map/toolbar3.png'), 'Save GCP', self)
         self.ui.toolbarTable.addAction(saveGCPButton)
         saveGCPButton.triggered.connect(self.saveGCP)
-        
-        loadGCPButton = QAction(QIcon(':/plugins/Pic2Map/toolbar4.png'), 'Load GCP', self)
+
+        loadGCPButton = QAction(
+            QIcon(':/plugins/Pic2Map/toolbar4.png'), 'Load GCP', self)
         self.ui.toolbarTable.addAction(loadGCPButton)
         loadGCPButton.triggered.connect(self.loadGCP)
-        
-        removereprojectedCrossectionsButton = QAction(QIcon(':/plugins/Pic2Map/toolbar13.png'), 'remove GCP reprojectedCrossections', self)
+
+        removereprojectedCrossectionsButton = QAction(QIcon(
+            ':/plugins/Pic2Map/toolbar13.png'), 'remove GCP reprojectedCrossections', self)
         self.ui.toolbarTable.addAction(removereprojectedCrossectionsButton)
-        removereprojectedCrossectionsButton.triggered.connect(self.removereprojectedCrossections)
-        
-        ZoomInButton = QAction(QIcon(':/plugins/Pic2Map/toolbar5.png'), 'Zoom In', self)
+        removereprojectedCrossectionsButton.triggered.connect(
+            self.removereprojectedCrossections)
+
+        ZoomInButton = QAction(
+            QIcon(':/plugins/Pic2Map/toolbar5.png'), 'Zoom In', self)
         self.ui.toolbarView.addAction(ZoomInButton)
         ZoomInButton.triggered.connect(self.ZoomIn)
-        
-        ZoomOutButton = QAction(QIcon(':/plugins/Pic2Map/toolbar6.png'), 'Zoom Out', self)
+
+        ZoomOutButton = QAction(
+            QIcon(':/plugins/Pic2Map/toolbar6.png'), 'Zoom Out', self)
         self.ui.toolbarView.addAction(ZoomOutButton)
         ZoomOutButton.triggered.connect(self.ZoomOut)
-        
-        PanButton = QAction(QIcon(':/plugins/Pic2Map/toolbar7.png'), 'Pan', self)
+
+        PanButton = QAction(
+            QIcon(':/plugins/Pic2Map/toolbar7.png'), 'Pan', self)
         self.ui.toolbarView.addAction(PanButton)
         PanButton.setCheckable(True)
         PanButton.triggered.connect(self.Pan)
-        
-        IconsViewButton = QAction(QIcon(':/plugins/Pic2Map/toolbar8.png'), 'Symbols Settings', self)
+
+        IconsViewButton = QAction(
+            QIcon(':/plugins/Pic2Map/toolbar8.png'), 'Symbols Settings', self)
         self.ui.toolbarTable.addAction(IconsViewButton)
         IconsViewButton.triggered.connect(self.iconsView)
-        
-        PoseButton = QAction(QIcon(':/plugins/Pic2Map/toolbar9.png'), 'Pose estimation', self)
+
+        PoseButton = QAction(
+            QIcon(':/plugins/Pic2Map/toolbar9.png'), 'Pose estimation', self)
         self.ui.toolbarPose.addAction(PoseButton)
         PoseButton.triggered.connect(self.PoseView)
-        
-        D3Button = QAction(QIcon(':/plugins/Pic2Map/toolbar10.png'), '3D-View', self)
+
+        D3Button = QAction(
+            QIcon(':/plugins/Pic2Map/toolbar10.png'), '3D-View', self)
         self.ui.toolbarPose.addAction(D3Button)
         D3Button.triggered.connect(self.call3DView)
-        
-        self.GoToMonoplotterButton = QAction(QIcon(':/plugins/Pic2Map/toolbar11.png'), 'Go to Monoplotter', self)
+
+        self.GoToMonoplotterButton = QAction(
+            QIcon(':/plugins/Pic2Map/toolbar11.png'), 'Go to Monoplotter', self)
         self.ui.toolbarPose.addAction(self.GoToMonoplotterButton)
-    
-        self.exifInfoButton = QAction(QIcon(':/plugins/Pic2Map/toolbar14.png'), 'EXIF Informations', self)
+
+        self.exifInfoButton = QAction(
+            QIcon(':/plugins/Pic2Map/toolbar14.png'), 'EXIF Informations', self)
         self.ui.toolbarPose.addAction(self.exifInfoButton)
         self.exifInfoButton.triggered.connect(self.exifInfoDisp)
-        
-        self.saveAsKMLButton = QAction(QIcon(':/plugins/Pic2Map/toolbar16.png'), 'Save Pose as KML', self)
+
+        self.saveAsKMLButton = QAction(
+            QIcon(':/plugins/Pic2Map/toolbar16.png'), 'Save Pose as KML', self)
         self.ui.toolbarPose.addAction(self.saveAsKMLButton)
         self.saveAsKMLButton.triggered.connect(self.saveAsKML)
-        
-        self.loadAsKMLButton = QAction(QIcon(':/plugins/Pic2Map/toolbar15.png'), 'Load Pose as KML', self)
+
+        self.loadAsKMLButton = QAction(
+            QIcon(':/plugins/Pic2Map/toolbar15.png'), 'Load Pose as KML', self)
         self.ui.toolbarPose.addAction(self.loadAsKMLButton)
         self.loadAsKMLButton.triggered.connect(self.loadAsKML)
-        
-        ZoomOnCrossButton = QAction(QIcon(':/plugins/Pic2Map/toolbar12.png'), 'Zoom on selected GCP', self)
+
+        ZoomOnCrossButton = QAction(
+            QIcon(':/plugins/Pic2Map/toolbar12.png'), 'Zoom on selected GCP', self)
         self.ui.toolbarView.addAction(ZoomOnCrossButton)
         ZoomOnCrossButton.triggered.connect(self.zoomOnCross)
 
         # set a scene in the view
         self.scene = QGraphicsScene()
-        self.ui.graphicsView.setScene(self.scene);
+        self.ui.graphicsView.setScene(self.scene)
         self.scene.mousePressEvent = self.newPictureGCP
-        #Use a TableModel for managing GCP
+        # Use a TableModel for managing GCP
         self.model = GCPs.GCPTableModel("GCPs.dat")
         self.ui.tableView.setModel(self.model)
         header = self.ui.tableView.horizontalHeader()
-        self.ui.tableView.selectionModel().currentRowChanged.connect(self.refreshPictureGCP) 
-        self.ui.tableView.selectionModel().currentRowChanged.connect(self.refreshCanvasGCP) 
+        self.ui.tableView.selectionModel().currentRowChanged.connect(
+            self.refreshPictureGCP)
+        self.ui.tableView.selectionModel().currentRowChanged.connect(
+            self.refreshCanvasGCP)
         self.ui.graphicsView.wheelEvent = self.wheelEvent
-        
+
         self.canvas.extentsChanged.connect(self.refreshCanvasGCPNumbers)
-        
+
         # Following are parameters for pose estimation
-        # The variables are chosen such that the integration of openGL is straightforward
+        # The variables are chosen such that the integration of openGL is
+        # straightforward
         self.pos = None
         self.lookat = None
         self.FOV = 30
         self.roll = 0
-        self.paramPoseView  = [0,0,0,0,0,0,sqrt(self.sizePicture[0]**2+self.sizePicture[1]**2),self.sizePicture[0]/2.0,self.sizePicture[1]/2.0]
+        self.paramPoseView = [0, 0, 0, 0, 0, 0, sqrt(self.sizePicture[
+                                                     0] ** 2 + self.sizePicture[1] ** 2), self.sizePicture[0] / 2.0, self.sizePicture[1] / 2.0]
         self.positionFixed = False
         # indice for fixed or free parameters for pose estimation
-        self.whoIsChecked = [True, False]*7
-        self.ui.statusbar.showMessage('Need at least 6 GCP for pose estimation')
-                
+        self.whoIsChecked = [True, False] * 7
+        self.ui.statusbar.showMessage(
+            'Need at least 6 GCP for pose estimation')
+
     def saveAsKML(self):
         # Save the pose in KML file. It can be open in googleEarth
         if self.pos != None:
@@ -189,136 +216,171 @@ class GetGCPMainWindow(QMainWindow):
             roll = self.roll
             FOV = self.FOV
             lookat = self.lookat
-            dx = pos[0]-lookat[0]
-            dy = pos[2]-lookat[2]
-            dz = pos[1]-lookat[1]
-            heading = arctan2(dx,-dy)*180/pi
-            tilt = arctan(-dz/sqrt(dx**2+dy**2))*180/pi+90
-            
+            dx = pos[0] - lookat[0]
+            dy = pos[2] - lookat[2]
+            dz = pos[1] - lookat[1]
+            heading = arctan2(dx, -dy) * 180 / pi
+            tilt = arctan(-dz / sqrt(dx ** 2 + dy ** 2)) * 180 / pi + 90
+
             crsSource = QgsCoordinateReferenceSystem(self.crs.postgisSrid())
             crsTarget = QgsCoordinateReferenceSystem(4326)
             xform = QgsCoordinateTransform(crsSource, crsTarget)
-            WGSPos = xform.transform(QgsPoint(-pos[0],pos[2]))
+            WGSPos = xform.transform(QgsPoint(-pos[0], pos[2]))
             altitude = pos[1]
             est = WGSPos[0]
             nord = WGSPos[1]
-            ratio = self.sizePicture[0]/float(self.sizePicture[1])
-            leftFOV = -ratio*FOV/2.0
-            rightFOV = ratio*FOV/2.0
-            topFOV = FOV/2.0
-            bottomFOV = -FOV/2.0
+            ratio = self.sizePicture[0] / float(self.sizePicture[1])
+            leftFOV = -ratio * FOV / 2.0
+            rightFOV = ratio * FOV / 2.0
+            topFOV = FOV / 2.0
+            bottomFOV = -FOV / 2.0
             near = 300.0
-            self.writeKML(est, nord, altitude, heading, tilt, roll, leftFOV, rightFOV, topFOV, bottomFOV, near)
+            self.writeKML(est, nord, altitude, heading, tilt,
+                          roll, leftFOV, rightFOV, topFOV, bottomFOV, near)
             self.ui.statusbar.showMessage('Pose saved in KML file')
         else:
-             QMessageBox.warning(QMainWindow(),"Error","Pose not valid")
-        
+            QMessageBox.warning(QMainWindow(), "Error", "Pose not valid")
+
     def loadAsKML(self):
-        # Read a KML file created by th plugin or a KML for a picture pose in google Earth
+        # Read a KML file created by th plugin or a KML for a picture pose in
+        # google Earth
         path = self.pathToData + "/pose.kml"
-        fName = QFileDialog.getOpenFileName(self, 'Open file',path,("Kml (*.kml)"))
+        fName = QFileDialog.getOpenFileName(
+            self, 'Open file', path, ("Kml (*.kml)"))
         if not fName:
             return
-        file=QFile(fName)
+        file = QFile(fName)
 
         if (not file.open(QIODevice.ReadOnly | QIODevice.Text)):
-            QMessageBox.warning(self, 'Application', QString('Cannot read file %1:\n%2.').arg(fname).arg(file.errorString()))
+            QMessageBox.warning(self, 'Application', QString(
+                'Cannot read file %1:\n%2.').arg(fname).arg(file.errorString()))
             return False
         else:
-            doc = QtXml.QDomDocument("EnvironmentML");
+            doc = QtXml.QDomDocument("EnvironmentML")
             if(not doc.setContent(file)):
                 file.close()
-                QMessageBox.warning(self,"Error","Could not parse xml file.")
+                QMessageBox.warning(self, "Error", "Could not parse xml file.")
             file.close()
-            root = doc.documentElement();
-            if(root.tagName()!="kml"):
-                 QMessageBox.warning(self,"Error","Could not parse xml file. Root Element must be <kml/>.")
+            root = doc.documentElement()
+            if(root.tagName() != "kml"):
+                QMessageBox.warning(
+                    self, "Error", "Could not parse xml file. Root Element must be <kml/>.")
             else:
                 try:
-                    longitude = float(doc.elementsByTagName('longitude').at(0).firstChild().toText().data())
-                    latitude = float(doc.elementsByTagName('latitude').at(0).firstChild().toText().data())
-                    altitude = float(doc.elementsByTagName('altitude').at(0).firstChild().toText().data())
-                    Heading = float(doc.elementsByTagName('heading').at(0).firstChild().toText().data())
-                    Tilt = float(doc.elementsByTagName('tilt').at(0).firstChild().toText().data())
-                    Roll = float(doc.elementsByTagName('roll').at(0).firstChild().toText().data())
-                    altitudeMode = doc.elementsByTagName('altitudeMode').at(0).firstChild().toText().data()
+                    longitude = float(
+                        doc.elementsByTagName('longitude').at(0).firstChild().toText().data())
+                    latitude = float(
+                        doc.elementsByTagName('latitude').at(0).firstChild().toText().data())
+                    altitude = float(
+                        doc.elementsByTagName('altitude').at(0).firstChild().toText().data())
+                    Heading = float(
+                        doc.elementsByTagName('heading').at(0).firstChild().toText().data())
+                    Tilt = float(
+                        doc.elementsByTagName('tilt').at(0).firstChild().toText().data())
+                    Roll = float(
+                        doc.elementsByTagName('roll').at(0).firstChild().toText().data())
+                    altitudeMode = doc.elementsByTagName(
+                        'altitudeMode').at(0).firstChild().toText().data()
                     if altitudeMode == '':
-                        altitudeMode = doc.elementsByTagName('gx:altitudeMode').at(0).firstChild().toText().data()
-                    leftFov = float(doc.elementsByTagName('leftFov').at(0).firstChild().toText().data())
-                    rightFov = float(doc.elementsByTagName('rightFov').at(0).firstChild().toText().data())
-                    bottomFov = float(doc.elementsByTagName('bottomFov').at(0).firstChild().toText().data())
-                    topFov = float(doc.elementsByTagName('topFov').at(0).firstChild().toText().data())
+                        altitudeMode = doc.elementsByTagName(
+                            'gx:altitudeMode').at(0).firstChild().toText().data()
+                    leftFov = float(
+                        doc.elementsByTagName('leftFov').at(0).firstChild().toText().data())
+                    rightFov = float(
+                        doc.elementsByTagName('rightFov').at(0).firstChild().toText().data())
+                    bottomFov = float(
+                        doc.elementsByTagName('bottomFov').at(0).firstChild().toText().data())
+                    topFov = float(
+                        doc.elementsByTagName('topFov').at(0).firstChild().toText().data())
                     try:
-                        Rotation = float(doc.elementsByTagName('rotation').at(0).firstChild().toText().data())
+                        Rotation = float(
+                            doc.elementsByTagName('rotation').at(0).firstChild().toText().data())
                     except:
                         Rotation = 0
                 except:
-                     QMessageBox.warning(QMainWindow(),"Error","Could not use xml file. Problem parsing.")
+                    QMessageBox.warning(
+                        QMainWindow(), "Error", "Could not use xml file. Problem parsing.")
                 else:
-                    #The focal has to be centered
-                    if leftFov != -1*rightFov or bottomFov != -1*topFov:
-                         QMessageBox.warning(QMainWindow(),"Error","Could not use xml file. Problem of field of view definition.")
-                    #Only the absolute elevation is possible. The mode "above the ground" is not supported
+                    # The focal has to be centered
+                    if leftFov != -1 * rightFov or bottomFov != -1 * topFov:
+                        QMessageBox.warning(QMainWindow(
+                        ), "Error", "Could not use xml file. Problem of field of view definition.")
+                    # Only the absolute elevation is possible. The mode "above
+                    # the ground" is not supported
                     if altitudeMode != 'absolute' and altitudeMode != 'relativeToSeaFloor':
-                         QMessageBox.warning(QMainWindow(),"Error","Could not use xml file. Problem of altitude definition (1).")
-                    #The has to be near zero given the construction of the KML. The roll is not given by the Roll, but by Rotation
+                        QMessageBox.warning(
+                            QMainWindow(), "Error", "Could not use xml file. Problem of altitude definition (1).")
+                    # The has to be near zero given the construction of the
+                    # KML. The roll is not given by the Roll, but by Rotation
                     if Roll > 0.1:
-                         QMessageBox.warning(QMainWindow(),"Error","Could not use xml file. Problem of roll definition.")
-                    #Check if the latitude and longitude are valid
-                    if latitude > 91 or latitude < -91 or longitude > 361 :
-                         QMessageBox.warning(QMainWindow(),"Error","Could not use xml file. Problem of coordinates definition.")
-                    
-                    # Transform the position coordinates from wgs84 to the DEM coordinate system
-                    crsTarget = QgsCoordinateReferenceSystem(self.crs.postgisSrid())
+                        QMessageBox.warning(
+                            QMainWindow(), "Error", "Could not use xml file. Problem of roll definition.")
+                    # Check if the latitude and longitude are valid
+                    if latitude > 91 or latitude < -91 or longitude > 361:
+                        QMessageBox.warning(
+                            QMainWindow(), "Error", "Could not use xml file. Problem of coordinates definition.")
+
+                    # Transform the position coordinates from wgs84 to the DEM
+                    # coordinate system
+                    crsTarget = QgsCoordinateReferenceSystem(
+                        self.crs.postgisSrid())
                     crsSource = QgsCoordinateReferenceSystem(4326)
                     xform = QgsCoordinateTransform(crsSource, crsTarget)
-                    LocalPos = xform.transform(QgsPoint(longitude,latitude))
+                    LocalPos = xform.transform(QgsPoint(longitude, latitude))
                     if altitudeMode == 'relativeToSeaFloor':
-                        #try:
+                        # try:
                         if self.cLayer:
-                            ident =  self.cLayer.dataProvider().identify(QgsPoint(LocalPos[0],LocalPos[1]),QgsRaster.IdentifyFormatValue).results()
+                            ident = self.cLayer.dataProvider().identify(
+                                QgsPoint(LocalPos[0], LocalPos[1]), QgsRaster.IdentifyFormatValue).results()
                             if len(ident.items()) > 1:
                                 raise IOError, "Multiband layer selected"
                             value = ident.get(1)
                             altitude = altitude + value
-                        #except :
+                        # except :
                             #QMessageBox.warning(QMainWindow(),"Error","Could not use xml file. Problem of altitude definition (2).")
                     pos = array([-LocalPos[0], altitude, LocalPos[1]])
-                    FOV = 2*topFov
-                    heading = Heading/180.0*pi
-                    roll = Rotation/180.0*pi
-                    tilt = Tilt/180.0*pi
-                    
+                    FOV = 2 * topFov
+                    heading = Heading / 180.0 * pi
+                    roll = Rotation / 180.0 * pi
+                    tilt = Tilt / 180.0 * pi
+
                     try:
-                        swing = arcsin(sin(roll)/(-sin(tilt)))
+                        swing = arcsin(sin(roll) / (-sin(tilt)))
                     except ZeroDivisionError:
                         swing = 0
-                    
-                    #Create a rotation matrix . the point [0,0,-1] is rotated for the openGL "lookat" function.
-                    R = zeros((3,3))
-                    R[0,0] = -cos(heading)*cos(swing)-sin(heading)*cos(tilt)*sin(swing)
-                    R[0,1] =  sin(heading)*cos(swing)-cos(heading)*cos(tilt)*sin(swing) 
-                    R[0,2] = -sin(tilt)*sin(swing)
-                    R[1,0] =  cos(heading)*sin(swing)-sin(heading)*cos(tilt)*cos(swing)
-                    R[1,1] = -sin(heading)*sin(swing)-cos(heading)*cos(tilt)*cos(swing) 
-                    R[1,2] = -sin(tilt)*cos(swing)
-                    R[2,0] = -sin(heading)*sin(tilt)
-                    R[2,1] = -cos(heading)*sin(tilt)
-                    R[2,2] =  cos(tilt)
-                    
-                    not_awesome_vector = array([0,0,-1])
-                    fast_awesome_vector = dot(linalg.inv(R),not_awesome_vector)
-                    awesome_vector = array(fast_awesome_vector)+array([LocalPos[0], LocalPos[1] , altitude])
-                    lookat = array([-awesome_vector[0], awesome_vector[2], awesome_vector[1]])
-                    
+
+                    # Create a rotation matrix . the point [0,0,-1] is rotated
+                    # for the openGL "lookat" function.
+                    R = zeros((3, 3))
+                    R[0, 0] = -cos(heading) * cos(swing) - \
+                        sin(heading) * cos(tilt) * sin(swing)
+                    R[0, 1] = sin(heading) * cos(swing) - \
+                        cos(heading) * cos(tilt) * sin(swing)
+                    R[0, 2] = -sin(tilt) * sin(swing)
+                    R[1, 0] = cos(heading) * sin(swing) - \
+                        sin(heading) * cos(tilt) * cos(swing)
+                    R[1, 1] = -sin(heading) * sin(swing) - \
+                        cos(heading) * cos(tilt) * cos(swing)
+                    R[1, 2] = -sin(tilt) * cos(swing)
+                    R[2, 0] = -sin(heading) * sin(tilt)
+                    R[2, 1] = -cos(heading) * sin(tilt)
+                    R[2, 2] = cos(tilt)
+
+                    not_awesome_vector = array([0, 0, -1])
+                    fast_awesome_vector = dot(
+                        linalg.inv(R), not_awesome_vector)
+                    awesome_vector = array(
+                        fast_awesome_vector) + array([LocalPos[0], LocalPos[1], altitude])
+                    lookat = array(
+                        [-awesome_vector[0], awesome_vector[2], awesome_vector[1]])
+
                     # Get parameters for pose in openGL
                     self.roll = roll
                     self.FOV = FOV
                     self.pos = pos
                     self.lookat = lookat
                     self.ui.statusbar.showMessage('Pose loaded from KML file.')
-                    
-                    
+
     def exifInfoDisp(self):
         try:
             exifInfo = ExifInfo(self.picture_name, self.crs)
@@ -328,15 +390,14 @@ class GetGCPMainWindow(QMainWindow):
             result = exifInfo.exec_()
 
         except:
-            QMessageBox.warning(QWidget(), "Read - Error","Failed to load EXIF information.\nPicture may not have meta-data" )
-            
-    
+            QMessageBox.warning(QWidget(
+            ), "Read - Error", "Failed to load EXIF information.\nPicture may not have meta-data")
+
     def fixFocal(self, focalPixel):
         self.paramPoseView[6] = focalPixel
         self.whoIsChecked[12] = False
         self.whoIsChecked[13] = True
 
-        
     def zoomOnCross(self):
         if self.ui.tableView.selectedIndexes() != []:
             index = self.ui.tableView.currentIndex()
@@ -344,71 +405,81 @@ class GetGCPMainWindow(QMainWindow):
                 return
             row = index.row()
             pos = []
-            for i in range(0,5):
+            for i in range(0, 5):
                 index = self.model.index(row, i)
                 pos.append(self.model.data(index))
                 if not isinstance(pos[i], (int, long, float)):
-                   QMessageBox.warning(QWidget(), "Value - Error","Failed to load current point" )
-                   return
+                    QMessageBox.warning(
+                        QWidget(), "Value - Error", "Failed to load current point")
+                    return
 
             matrix = QMatrix()
-            zoomFactorOnCross = QDesktopWidget().screenGeometry().height()/(10.0*self.iconSet.SM)
+            zoomFactorOnCross = QDesktopWidget().screenGeometry().height() / \
+                (10.0 * self.iconSet.SM)
             matrix.scale(zoomFactorOnCross, zoomFactorOnCross)
             self.ui.graphicsView.setMatrix(matrix)
-            hOffset = self.ui.graphicsView.size().width()/(2.0*zoomFactorOnCross)
-            vOffset = self.ui.graphicsView.size().height()/(2.0*zoomFactorOnCross)
-            hValue = (pos[0]-hOffset)*matrix.m11()
-            vValue = (pos[1]-vOffset)*matrix.m22()
+            hOffset = self.ui.graphicsView.size().width() / \
+                (2.0 * zoomFactorOnCross)
+            vOffset = self.ui.graphicsView.size().height() / \
+                (2.0 * zoomFactorOnCross)
+            hValue = (pos[0] - hOffset) * matrix.m11()
+            vValue = (pos[1] - vOffset) * matrix.m22()
             self.ui.graphicsView.horizontalScrollBar().setValue(hValue)
             self.ui.graphicsView.verticalScrollBar().setValue(vValue)
-            self.setCanvasExtentSignal.emit((pos[2],pos[3]))
+            self.setCanvasExtentSignal.emit((pos[2], pos[3]))
             self.ui.statusbar.showMessage('View zoomed on selected GCP')
-        
+
     def call3DView(self):
         # create an openGL window.
-        self.view3D = D3_view(self.pointBuffer, None,  self.roll, self.FOV, 100, self.pos, self.lookat, self.isFrameBufferSupported)
+        self.view3D = D3_view(self.pointBuffer, None,  self.roll,
+                              self.FOV, 100, self.pos, self.lookat, self.isFrameBufferSupported)
         self.view3D.show()
         # emit when left click and Ctrl is pressed
-        self.view3D.getGCPIn3DviewSignal.connect(self.getGCPIn3Dview) 
-        
-        #emit when left click and Alt is pressed   
-        self.view3D.fixPositionSignal.connect(self.fixPosition)  
+        self.view3D.getGCPIn3DviewSignal.connect(self.getGCPIn3Dview)
 
-        #get same size as the scene
+        # emit when left click and Alt is pressed
+        self.view3D.fixPositionSignal.connect(self.fixPosition)
+
+        # get same size as the scene
         resolution = QDesktopWidget().screenGeometry()
-        size = [0,0]
-        size[1] = resolution.height()/2
-        size[0] = int(self.sizePicture[0]/float(self.sizePicture[1])*size[1])
-        self.view3D.resize(size[0],size[1])
-        offsetU = self.sizePicture[0]+2*abs(self.paramPoseView[7]-self.sizePicture[0]/2)
-        offsetV = self.sizePicture[1]+2*abs(self.paramPoseView[8]-self.sizePicture[1]/2)
-        #self.view3D.resize(offsetU,offsetV)
+        size = [0, 0]
+        size[1] = resolution.height() / 2
+        size[0] = int(
+            self.sizePicture[0] / float(self.sizePicture[1]) * size[1])
+        self.view3D.resize(size[0], size[1])
+        offsetU = self.sizePicture[
+            0] + 2 * abs(self.paramPoseView[7] - self.sizePicture[0] / 2)
+        offsetV = self.sizePicture[
+            1] + 2 * abs(self.paramPoseView[8] - self.sizePicture[1] / 2)
+        # self.view3D.resize(offsetU,offsetV)
         self.refresh3DGCPs()
-        self.ui.statusbar.showMessage('in 3D view: ctrl+click for GCP position, alt+click for camera position')
-        
+        self.ui.statusbar.showMessage(
+            'in 3D view: ctrl+click for GCP position, alt+click for camera position')
+
     def refresh3DGCPs(self):
-        # draw GCP in the 3D view. The GCP from canvas are drawn, not the reprojectedCrossection
+        # draw GCP in the 3D view. The GCP from canvas are drawn, not the
+        # reprojectedCrossection
         rowCount = self.model.rowCount()
         GCPs = []
-        for row in range(0,rowCount):
-            if  self.model.checkValid(row)==0:
+        for row in range(0, rowCount):
+            if self.model.checkValid(row) == 0:
                 continue
             index = self.model.index(row, 2)
-            localx = -1*self.model.data(index)
-            index = self.model.index(row,4)
+            localx = -1 * self.model.data(index)
+            index = self.model.index(row, 4)
             localy = self.model.data(index)
-            index = self.model.index(row,3)
+            index = self.model.index(row, 3)
             localz = self.model.data(index)
-            GCPs.append((localx,localy,localz))
+            GCPs.append((localx, localy, localz))
         self.view3D.sheeps = GCPs
         self.view3D.sheepsSize = self.iconSet.S3d
         self.view3D.updateGL()
-    
+
     def fixPosition(self, position):
         # Fix position by alt + click on the 3D view before pose estimation
         # It fixes the position in the pose dialogue window
         self.paramPoseView[0] = position[0]
-        self.paramPoseView[2] = position[1]+10
+        self.paramPoseView[2] = position[1] + 10
         self.paramPoseView[1] = position[2]
         self.whoIsChecked[0] = False
         self.whoIsChecked[1] = True
@@ -416,16 +487,18 @@ class GetGCPMainWindow(QMainWindow):
         self.whoIsChecked[3] = True
         self.whoIsChecked[4] = False
         self.whoIsChecked[5] = True
-        self.ui.statusbar.showMessage('Position Fixed. For unfixing, open the pose estimation dialogue box and free the position')
-        
+        self.ui.statusbar.showMessage(
+            'Position Fixed. For unfixing, open the pose estimation dialogue box and free the position')
+
     def getGCPIn3Dview(self):
-        # Update world coordinates value of selected GCP when alt+click on the 3D view
+        # Update world coordinates value of selected GCP when alt+click on the
+        # 3D view
         x = -self.view3D.result[0]
         z = self.view3D.result[1]
         y = self.view3D.result[2]
-        self.updateLocalGCP(x,y,z)
+        self.updateLocalGCP(x, y, z)
         self.refresh3DGCPs()
-        
+
     def PoseView(self):
         # create a dialogue window for pose estimation
         self.ui.tableView.clearSelection()
@@ -433,24 +506,29 @@ class GetGCPMainWindow(QMainWindow):
         rowCount = self.model.rowCount()
        #  try :
         # get needed inputs for pose estimation
-        self.poseDialogue = Pose_dialog(self.model, self.paramPoseView, self.positionFixed, self.sizePicture, self.whoIsChecked, self.pathToData)
+        self.poseDialogue = Pose_dialog(
+            self.model, self.paramPoseView, self.positionFixed, self.sizePicture, self.whoIsChecked, self.pathToData)
         self.poseDialogue.update.connect(self.updatePose)
         self.poseDialogue.setWindowModality(Qt.ApplicationModal)
         self.poseDialogue.show()
         result = self.poseDialogue.exec_()
-        
+
     def updatePose(self):
         try:
             if hasattr(self, 'reprojectedCross'):
-                    for ri in self.reprojectedCross:
-                        self.canvas.scene().removeItem(ri)
+                for ri in self.reprojectedCross:
+                    self.canvas.scene().removeItem(ri)
             if not self.poseDialogue.done:
                 raise ValueError
             else:
-                self.lookat = [0,0,0]
-                self.lookat[0] = self.poseDialogue.lookat[0]; self.lookat[2] = self.poseDialogue.lookat[1]; self.lookat[1] = self.poseDialogue.lookat[2]
-                self.pos = [0,0,0]
-                self.pos[0] = self.poseDialogue.pos[0]; self.pos[2] = self.poseDialogue.pos[1]; self.pos[1] = self.poseDialogue.pos[2]
+                self.lookat = [0, 0, 0]
+                self.lookat[0] = self.poseDialogue.lookat[0]
+                self.lookat[2] = self.poseDialogue.lookat[1]
+                self.lookat[1] = self.poseDialogue.lookat[2]
+                self.pos = [0, 0, 0]
+                self.pos[0] = self.poseDialogue.pos[0]
+                self.pos[2] = self.poseDialogue.pos[1]
+                self.pos[1] = self.poseDialogue.pos[2]
                 self.FOV = self.poseDialogue.FOV
                 self.roll = self.poseDialogue.roll
                 self.paramPoseView = self.poseDialogue.result
@@ -458,114 +536,122 @@ class GetGCPMainWindow(QMainWindow):
                 self.XYZUsed = self.poseDialogue.xyzUsed
                 self.GCPErrorPos()
                 self.getPositionInCanvas()
-                self.ui.statusbar.showMessage('You can save GCPs in .dat file or save pose estimation in KML file')
+                self.ui.statusbar.showMessage(
+                    'You can save GCPs in .dat file or save pose estimation in KML file')
         except ValueError:
-           QMessageBox.warning(self, "Pose - Error","Failed to estimate pose")
-           
+            QMessageBox.warning(
+                self, "Pose - Error", "Failed to estimate pose")
+
     def getPositionInCanvas(self):
         self.canvas.scene().removeItem(self.poseCanvas)
         xPos = -self.paramPoseView[0]
         yPos = self.paramPoseView[1]
-        
-        points = QgsPoint(xPos,yPos)
+
+        points = QgsPoint(xPos, yPos)
         self.poseCanvas = QgsVertexMarker(self.canvas)
         self.poseCanvas.setCenter(points)
         self.poseCanvas.setColor(QColor(255, 255, 0))
         self.poseCanvas.setIconSize(self.iconSet.SC)
         self.poseCanvas.setIconType(QgsVertexMarker.ICON_BOX)
         self.poseCanvas.setPenWidth(self.iconSet.WC)
-        
-            
+
     def GCPErrorPos(self):
-        # fill the last column of the table. 
-        # Errors are the distance in meter between a GCP and its the projection of the corresponding picture GCP
-        
+        # fill the last column of the table.
+        # Errors are the distance in meter between a GCP and its the projection
+        # of the corresponding picture GCP
+
         # An openGL window is for projection purposes.
         # Mathematically speaking, we don't need it because we already have the homography transformation.
         # However, the pose estimation from homography matrix is not straightforward. The resulting pose is not
-        # equal to the homography matrix, even it may be very close. In some case, the pose can be very bad 
+        # equal to the homography matrix, even it may be very close. In some case, the pose can be very bad
         # even we get a pretty fine projection from homography. The projection trough openGL is much more
         # comparable to the behavior of the monoplotter compared with the Homography matrix.
-        # This explain why we create an openGL window for projection instead of a simple homographic projection.
-        
+        # This explain why we create an openGL window for projection instead of
+        # a simple homographic projection.
+
         resolution = QDesktopWidget().screenGeometry()
-        size = [0,0]
-        size[1] = resolution.height()/2
-        size[0] = int(self.sizePicture[0]/float(self.sizePicture[1])*size[1])
-        
-        self.refineViewQGL = D3_view(self.pointBuffer, None, self.roll, self.FOV, 0, self.pos, self.lookat, True, [size[0],size[1]])
-        self.refineViewQGL.resize(size[0],size[1])
+        size = [0, 0]
+        size[1] = resolution.height() / 2
+        size[0] = int(
+            self.sizePicture[0] / float(self.sizePicture[1]) * size[1])
+
+        self.refineViewQGL = D3_view(
+            self.pointBuffer, None, self.roll, self.FOV, 0, self.pos, self.lookat, True, [size[0], size[1]])
+        self.refineViewQGL.resize(size[0], size[1])
         self.refineViewQGL.updateGL()
         self.refineViewQGL.show()
         self.refineViewQGL.updateGL()
-        
-        #Read the table of GCP, get all UV and project them
+
+        # Read the table of GCP, get all UV and project them
         rowCount = self.model.rowCount()
         Alluv = zeros((rowCount, 2))
-        Allxyz = zeros((rowCount,3))
-        for row in range(0,rowCount):
-                if self.model.checkValid(row)==0:
-                    continue
-                index = self.model.index(row,0)
-                Alluv[row,0] = self.model.data(index)/self.sizePicture[0]*size[0]
-                index = self.model.index(row,1)
-                Alluv[row,1] = (-self.model.data(index)+self.sizePicture[1])/self.sizePicture[1]*size[1]
-                index = self.model.index(row,2)
-                Allxyz[row,0] = self.model.data(index)
-                index = self.model.index(row,3)
-                Allxyz[row,1] = self.model.data(index)
-                index = self.model.index(row,4)
-                Allxyz[row,2] = self.model.data(index)
+        Allxyz = zeros((rowCount, 3))
+        for row in range(0, rowCount):
+            if self.model.checkValid(row) == 0:
+                continue
+            index = self.model.index(row, 0)
+            Alluv[row, 0] = self.model.data(
+                index) / self.sizePicture[0] * size[0]
+            index = self.model.index(row, 1)
+            Alluv[row, 1] = (-self.model.data(index) +
+                             self.sizePicture[1]) / self.sizePicture[1] * size[1]
+            index = self.model.index(row, 2)
+            Allxyz[row, 0] = self.model.data(index)
+            index = self.model.index(row, 3)
+            Allxyz[row, 1] = self.model.data(index)
+            index = self.model.index(row, 4)
+            Allxyz[row, 2] = self.model.data(index)
 
-        error, xyzUnProjected = self.refineViewQGL.getErrorOnGCP(Alluv,Allxyz)
-        self.poseDialogue.xyzUnProjected = xyzUnProjected #Used for report on GCPs
+        error, xyzUnProjected = self.refineViewQGL.getErrorOnGCP(Alluv, Allxyz)
+        # Used for report on GCPs
+        self.poseDialogue.xyzUnProjected = xyzUnProjected
         rowCount = self.model.rowCount()
-        
+
         self.uvTableAll = self.refineViewQGL.proj(Allxyz)
         self.uvTableActivated = self.refineViewQGL.proj(self.XYZUsed)
-        
-        pixelError = [0]*rowCount
-        for row in range(0,rowCount):
-            if  self.model.checkValid(row)==0:
+
+        pixelError = [0] * rowCount
+        for row in range(0, rowCount):
+            if self.model.checkValid(row) == 0:
                 continue
-            index = self.model.index(row,0)
+            index = self.model.index(row, 0)
             u = self.model.data(index)
-            index = self.model.index(row,1)
+            index = self.model.index(row, 1)
             v = self.model.data(index)
-            
-            u2 = self.uvTableAll[row][0]*self.sizePicture[0]/float(size[0])
-            v2 = self.sizePicture[1]-self.uvTableAll[row][1]*self.sizePicture[1]/float(size[1])
-            pixelError[row] = sqrt((u-u2)**2+(v-v2)**2)
-        
+
+            u2 = self.uvTableAll[row][0] * self.sizePicture[0] / float(size[0])
+            v2 = self.sizePicture[
+                1] - self.uvTableAll[row][1] * self.sizePicture[1] / float(size[1])
+            pixelError[row] = sqrt((u - u2) ** 2 + (v - v2) ** 2)
+
         # Error is added to the table
         count = 0
-        for row in range(0,rowCount):
-            if  self.model.checkValid(row)==0:
+        for row in range(0, rowCount):
+            if self.model.checkValid(row) == 0:
                 continue
             index = self.model.index(row, 6)
-            self.model.setData(index, round(error[count],2))
+            self.model.setData(index, round(error[count], 2))
             index2 = self.model.index(row, 7)
-            self.model.setData(index2, round(pixelError[count],2))
-            count +=1
+            self.model.setData(index2, round(pixelError[count], 2))
+            count += 1
 
-            
         self.refreshPictureGCP()
         self.refineViewQGL.close()
-        
+
         indice = 0
         canvasNumber = 0
-        for x,y,z in xyzUnProjected:
+        for x, y, z in xyzUnProjected:
             while error[indice] == -1:
-                indice+=1
-            x0,z0 = Allxyz[indice,0],Allxyz[indice,1]
+                indice += 1
+            x0, z0 = Allxyz[indice, 0], Allxyz[indice, 1]
             color = self.iconSet.colorM
-            self.drawCanvasGCPreprojectedCrossection(x,z,rowCount+canvasNumber,color,[x0,z0])
-            indice+=1
+            self.drawCanvasGCPreprojectedCrossection(
+                x, z, rowCount + canvasNumber, color, [x0, z0])
+            indice += 1
             canvasNumber += 1
-        
-        #Used for report on GCPs
+
+        # Used for report on GCPs
         self.poseDialogue.model = self.model
-            
 
     def iconsView(self):
         # Settings of the icons
@@ -578,107 +664,114 @@ class GetGCPMainWindow(QMainWindow):
             self.iconSet.SC = self.iconDia.uiIcons.spinBoxSC.value()
             self.iconSet.WC = self.iconDia.uiIcons.spinBoxWC.value()
             self.iconSet.S3d = self.iconDia.uiIcons.spinBoxS3d.value()
-            self.iconSet.colorC = self.iconDia.uiIcons.colorCButton.palette().color(1)
-            self.iconSet.colorM = self.iconDia.uiIcons.colorMButton.palette().color(1)
-         
+            self.iconSet.colorC = self.iconDia.uiIcons.colorCButton.palette().color(
+                1)
+            self.iconSet.colorM = self.iconDia.uiIcons.colorMButton.palette().color(
+                1)
+
         try:
             self.refreshPictureGCP()
             self.refreshCanvasGCP()
         except:
             QMessageBox.warning(self, "Icons - Error",
-                    "Failed update icons: %s" % e)
-        
+                                "Failed update icons: %s" % e)
+
     def wheelEvent(self, event):
-        #Zoom with wheel
+        # Zoom with wheel
         factor = 1.41 ** (event.delta() / 240.0)
         self.ui.graphicsView.scale(factor, factor)
         self.zoomFactor = factor
 
     def Pan(self, pressed):
-        #Pan when pan button is toogled
-        self.ui.tableView.clearSelection ()
+        # Pan when pan button is toogled
+        self.ui.tableView.clearSelection()
         if pressed:
             self.ui.graphicsView.setDragMode(QGraphicsView.ScrollHandDrag)
         else:
             self.ui.graphicsView.setDragMode(QGraphicsView.NoDrag)
-    
+
     def ZoomOut(self):
         # zoom out when correponding button is pushed
         matrix = QMatrix()
         self.zoomFactor *= 0.75
         matrix.scale(self.zoomFactor, self.zoomFactor)
         self.ui.graphicsView.setMatrix(matrix)
-        
+
     def ZoomIn(self):
         # zoom in when correponding button is pushed
         matrix = QMatrix()
         self.zoomFactor *= 1.5
         matrix.scale(self.zoomFactor, self.zoomFactor)
-        self.ui.graphicsView.setMatrix(matrix) 
-        
+        self.ui.graphicsView.setMatrix(matrix)
+
     def selectCanvasPoint(self, point):
         # Canvas coordinates for selected GCP are set
         try:
             if self.cLayer:
-                ident =  self.cLayer.dataProvider().identify(point,QgsRaster.IdentifyFormatValue).results()
+                ident = self.cLayer.dataProvider().identify(
+                    point, QgsRaster.IdentifyFormatValue).results()
                 if len(ident.items()) > 1:
                     raise IOError, "Multiband layer selected"
                 value = ident.get(1)
                 self.updateLocalGCP(point.x(), point.y(), value)
             else:
-                QMessageBox.warning(self, "DEM error","Failed to select layer")
+                QMessageBox.warning(
+                    self, "DEM error", "Failed to select layer")
         except:
-            QMessageBox.warning(self, "DEM error", "Failed to get point: %s" % e)
-        
+            QMessageBox.warning(
+                self, "DEM error", "Failed to get point: %s" % e)
+
     def removeGCP(self):
         # remove GCP from table
         index = self.ui.tableView.currentIndex()
         if not index.isValid():
             return
         row = index.row()
-        row_text = row+1
+        row_text = row + 1
         buffer = "Remove Point %d ?" % row_text
-        if QMessageBox.question(self, "GCPs - Remove", buffer ,\
-                QMessageBox.Yes|QMessageBox.No) == QMessageBox.No:
+        if QMessageBox.question(self, "GCPs - Remove", buffer,
+                                QMessageBox.Yes | QMessageBox.No) == QMessageBox.No:
             return
         self.model.removeRows(row)
         self.refreshPictureGCP()
         self.refreshCanvasGCP()
-        index = self.model.index(row-1, 6)
-        
+        index = self.model.index(row - 1, 6)
+
     def reject(self):
         self.accept()
 
     def saveGCP(self):
         # Save GCP to a .dat file
         path = self.pathToData + '/GCPs'
-        fSaveName = QFileDialog.getSaveFileName(self, 'Save your GCPs as...',\
-                                                  path,"File (*.dat)")
+        fSaveName = QFileDialog.getSaveFileName(self, 'Save your GCPs as...',
+                                                path, "File (*.dat)")
         if fSaveName:
             try:
                 self.model.save(fSaveName)
                 self.ui.statusbar.showMessage('GCPS saved')
             except:
                 QMessageBox.warning(self, "Points - Error",
-                        "Failed to save: %s" % e)
-            
+                                    "Failed to save: %s" % e)
+
     def setImage(self, name, size):
         # Set the picture in the scene
         img = Image.open(name)
         self.picture = QPixmap(name)
         size_pic = self.picture.size()
-        self.picture = self.picture.scaled(size_pic, Qt.IgnoreAspectRatio,Qt.SmoothTransformation)
+        self.picture = self.picture.scaled(
+            size_pic, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
         self.scene.addPixmap(self.picture)
         self.scene.update()
         self.ui.graphicsView.show()
-        
+
     def closeEvent(self, event):
-        # two different behaviors occurs. Either we quit the window, either we go to the monoplotter
+        # two different behaviors occurs. Either we quit the window, either we
+        # go to the monoplotter
         self.clearMapTool2.emit()
-        if not self.goToMonoplot:    
+        if not self.goToMonoplot:
             reply = QMessageBox.question(self, 'Message',
-                "Are you sure to quit?", QMessageBox.Yes | 
-                QMessageBox.No, QMessageBox.No)
+                                         "Are you sure to quit?", QMessageBox.Yes |
+                                         QMessageBox.No, QMessageBox.No)
             if reply == QMessageBox.Yes:
                 event.accept()
                 if hasattr(self, 'view3D'):
@@ -693,7 +786,7 @@ class GetGCPMainWindow(QMainWindow):
                 self.canvas.scene().removeItem(self.poseCanvas)
                 self.model = None
                 self.view3D = None
-                
+
             else:
                 event.ignore()
         else:
@@ -713,17 +806,18 @@ class GetGCPMainWindow(QMainWindow):
     def loadGCP(self):
         # load GCP from .dat file
         path = self.pathToData + '/GCPs'
-        fLoadName = QFileDialog.getOpenFileName(self, 'Load your GCPs',\
-                                                  path,"File (*.dat)")
+        fLoadName = QFileDialog.getOpenFileName(self, 'Load your GCPs',
+                                                path, "File (*.dat)")
         if fLoadName:
             try:
                 self.model.load(fLoadName)
                 self.model.reset()
                 self.refreshPictureGCP()
                 self.refreshCanvasGCP()
-                
+
             except:
-                QMessageBox.warning(self, "GCPs - Error","Failed to load: %s" % e)
+                QMessageBox.warning(
+                    self, "GCPs - Error", "Failed to load: %s" % e)
 
     def addGCP(self):
         # add a GCP to the table
@@ -736,8 +830,7 @@ class GetGCPMainWindow(QMainWindow):
         self.refreshCanvasGCP()
         self.refreshPictureGCP()
 
-        
-    def updateLocalGCP(self, x,y, value):
+    def updateLocalGCP(self, x, y, value):
         # update the X Y Z column of the GCP when a click on the canvas occurs
         index = self.ui.tableView.currentIndex()
         if not index.isValid():
@@ -753,7 +846,7 @@ class GetGCPMainWindow(QMainWindow):
             self.refresh3DGCPs()
             self.view3D.updateGL()
         return index
-    
+
     def updatePictureGCP(self, position):
         # update U V column of the GCP when a click on the picture occurs
         index = self.ui.tableView.currentIndex()
@@ -766,75 +859,76 @@ class GetGCPMainWindow(QMainWindow):
         self.model.setData(index, position.y())
         self.resetToolSignal.emit()
         return index
-    
+
     def newPictureGCP(self, ev):
         # mouse event when click on the picture with the GCP tool
-        self.ui.statusbar.showMessage('Get 3D coordinate by clicking in the QGIS canvas or in the 3D view')
+        self.ui.statusbar.showMessage(
+            'Get 3D coordinate by clicking in the QGIS canvas or in the 3D view')
         if self.ui.tableView.selectedIndexes() != []:
             if ev.button() == Qt.LeftButton:
                 a = ev.scenePos()
                 newDataIndex = self.updatePictureGCP(a)
                 self.refreshPictureGCP()
-        
+
     def refreshPictureGCP(self):
         # redraw all GCP in the picture
         rowCount = self.model.rowCount()
         self.scene.clear()
         self.scene.addPixmap(self.picture)
-        for row in range(0,rowCount):
-            if  self.model.checkValid(row)==0:
+        for row in range(0, rowCount):
+            if self.model.checkValid(row) == 0:
                 continue
             index = self.model.index(row, 0)
             posx = self.model.data(index)
-            index = self.model.index(row,1)
+            index = self.model.index(row, 1)
             posy = self.model.data(index)
             if row == self.ui.tableView.currentIndex().row():
-                pen = QPen(QColor(255, 0, 0) , self.iconSet.WM, Qt.SolidLine)
+                pen = QPen(QColor(255, 0, 0), self.iconSet.WM, Qt.SolidLine)
             else:
                 pen = QPen(self.iconSet.colorM, self.iconSet.WM, Qt.SolidLine)
-            self.itemCross(posx,posy, pen, row)
-        
-        #redraw reprojectedCrossection after pose estimation
+            self.itemCross(posx, posy, pen, row)
+
+        # redraw reprojectedCrossection after pose estimation
         resolution = QDesktopWidget().screenGeometry()
-        size = [0,0]
-        size[1] = resolution.height()/2
-        size[0] = int(self.sizePicture[0]/float(self.sizePicture[1])*size[1])
-        for u,v in self.uvTableAll:
-            u = u*self.sizePicture[0]/float(size[0])
-            v = self.sizePicture[1]-v*self.sizePicture[1]/float(size[1])
-            pen = QPen(QColor(240, 160, 240) , self.iconSet.WM, Qt.SolidLine)
-            self.itemCross(u,v, pen)
-        for u,v in self.uvTableActivated:
-            u = u*self.sizePicture[0]/float(size[0])
-            v = self.sizePicture[1]-v*self.sizePicture[1]/float(size[1])
-            pen = QPen(self.iconSet.colorC , self.iconSet.WM, Qt.SolidLine)
-            self.itemCross(u,v, pen)
-            #self.itemLine(u,v)
-        
+        size = [0, 0]
+        size[1] = resolution.height() / 2
+        size[0] = int(
+            self.sizePicture[0] / float(self.sizePicture[1]) * size[1])
+        for u, v in self.uvTableAll:
+            u = u * self.sizePicture[0] / float(size[0])
+            v = self.sizePicture[1] - v * self.sizePicture[1] / float(size[1])
+            pen = QPen(QColor(240, 160, 240), self.iconSet.WM, Qt.SolidLine)
+            self.itemCross(u, v, pen)
+        for u, v in self.uvTableActivated:
+            u = u * self.sizePicture[0] / float(size[0])
+            v = self.sizePicture[1] - v * self.sizePicture[1] / float(size[1])
+            pen = QPen(self.iconSet.colorC, self.iconSet.WM, Qt.SolidLine)
+            self.itemCross(u, v, pen)
+            # self.itemLine(u,v)
+
     def refreshCanvasGCP(self):
         # redraw canvas GCP
         rowCount = self.model.rowCount()
         for ri in self.canvasCross:
             self.canvas.scene().removeItem(ri)
-        self.canvasCross = [None]*rowCount
-        for row in range(0,rowCount):
-            if  self.model.checkValid(row)==0:
+        self.canvasCross = [None] * rowCount
+        for row in range(0, rowCount):
+            if self.model.checkValid(row) == 0:
                 continue
             index = self.model.index(row, 2)
             posx = self.model.data(index)
-            index = self.model.index(row,3)
+            index = self.model.index(row, 3)
             posy = self.model.data(index)
             if row == self.ui.tableView.currentIndex().row():
                 color = QColor(255, 0, 0)
             else:
                 color = self.iconSet.colorC
-            self.drawCanvasGCP(posx,posy,row,color)
-        
-            
-    def drawCanvasGCP(self,posx,posy,row,color):
+            self.drawCanvasGCP(posx, posy, row, color)
+
+    def drawCanvasGCP(self, posx, posy, row, color):
         # this is called from refreshCanvasGCP.
         self.canvasCross[row] = QgsVertexMarker(self.canvas)
-        points = QgsPoint(posx,posy)
+        points = QgsPoint(posx, posy)
         self.canvasCross[row].setCenter(points)
         self.canvasCross[row].setColor(color)
         self.canvasCross[row].setIconSize(self.iconSet.SC)
@@ -842,47 +936,48 @@ class GetGCPMainWindow(QMainWindow):
         self.canvasCross[row].setPenWidth(self.iconSet.WC)
         self.refreshCanvasGCPNumbers()
 
-        
     def refreshCanvasGCPNumbers(self):
         if self.model:
             for ri in self.canvasNumber:
                 self.canvas.scene().removeItem(ri)
             rowCount = self.model.rowCount()
-            self.canvasNumber = [None]*rowCount
-            for row in range(0,rowCount):
-                if  self.model.checkValid(row)==0:
+            self.canvasNumber = [None] * rowCount
+            for row in range(0, rowCount):
+                if self.model.checkValid(row) == 0:
                     continue
                 index = self.model.index(row, 2)
                 posx = self.model.data(index)
-                index = self.model.index(row,3)
+                index = self.model.index(row, 3)
                 posy = self.model.data(index)
-                
-                self.canvasNumber[row] =  QGraphicsTextItem();
+
+                self.canvasNumber[row] = QGraphicsTextItem()
                 font = QFont()
                 font.setPixelSize(self.iconSet.SC)
                 self.canvasNumber[row].setFont(font)
-                u,v = self.WorldToPixelOfCanvasCoordinates(posx,posy)
-                pos = QPointF(u,v)
+                u, v = self.WorldToPixelOfCanvasCoordinates(posx, posy)
+                pos = QPointF(u, v)
                 self.canvasNumber[row].setPos(pos)
-                self.canvasNumber[row].setPlainText(str(row+1));
+                self.canvasNumber[row].setPlainText(str(row + 1))
                 self.canvasNumber[row].setDefaultTextColor(self.iconSet.colorC)
                 self.sceneQgis.addItem(self.canvasNumber[row])
-            
-    def WorldToPixelOfCanvasCoordinates(self,x,y):
-      # This function is called in "clickOnMonoplotter".
-      # It convert CSR coordinates (world) into the screen coordinates for a given point in the canvas.
-      canvasExtent =  self.canvas.extent()
-      canvasBox =  [canvasExtent.xMinimum(), canvasExtent.yMinimum(), canvasExtent.xMaximum(), canvasExtent.yMaximum()]
-      UPP = self.canvas.mapUnitsPerPixel()
-      u = int((x-canvasBox[0])/UPP)
-      v = int((canvasBox[3]-y)/UPP)
-      return (u,v)
-        
-    def drawCanvasGCPreprojectedCrossection(self,posx,posy,row,color,p0):
+
+    def WorldToPixelOfCanvasCoordinates(self, x, y):
+        # This function is called in "clickOnMonoplotter".
+        # It convert CSR coordinates (world) into the screen coordinates for a
+        # given point in the canvas.
+        canvasExtent = self.canvas.extent()
+        canvasBox = [canvasExtent.xMinimum(), canvasExtent.yMinimum(
+        ), canvasExtent.xMaximum(), canvasExtent.yMaximum()]
+        UPP = self.canvas.mapUnitsPerPixel()
+        u = int((x - canvasBox[0]) / UPP)
+        v = int((canvasBox[3] - y) / UPP)
+        return (u, v)
+
+    def drawCanvasGCPreprojectedCrossection(self, posx, posy, row, color, p0):
         # this is called from GCPErrorPos after pose estimation
         self.reprojectedCross.append(QgsVertexMarker(self.canvas))
-        indice_r = len(self.reprojectedCross)-1
-        points = QgsPoint(posx,posy)
+        indice_r = len(self.reprojectedCross) - 1
+        points = QgsPoint(posx, posy)
         self.reprojectedCross[indice_r].setCenter(points)
         self.reprojectedCross[indice_r].setColor(color)
         self.reprojectedCross[indice_r].setIconSize(self.iconSet.SC)
@@ -890,62 +985,70 @@ class GetGCPMainWindow(QMainWindow):
         self.reprojectedCross[indice_r].setPenWidth(self.iconSet.WC)
 
         self.reprojectedCross.append(QgsRubberBand(self.canvas))
-        points = [QgsPoint(p0[0],p0[1]),  QgsPoint(posx,posy)]
-        self.reprojectedCross[indice_r+1].setToGeometry(QgsGeometry.fromPolyline(points), None)
-        self.reprojectedCross[indice_r+1].setColor(color)
-        self.reprojectedCross[indice_r+1].setWidth(self.iconSet.WC)
-            
+        points = [QgsPoint(p0[0], p0[1]),  QgsPoint(posx, posy)]
+        self.reprojectedCross[
+            indice_r + 1].setToGeometry(QgsGeometry.fromPolyline(points), None)
+        self.reprojectedCross[indice_r + 1].setColor(color)
+        self.reprojectedCross[indice_r + 1].setWidth(self.iconSet.WC)
+
     def removereprojectedCrossections(self):
-        # remove all reprojectedCrossections of GCP 
+        # remove all reprojectedCrossections of GCP
         self.uvTableActivated = []
         self.uvTableAll = []
         for ri in self.reprojectedCross:
             self.canvas.scene().removeItem(ri)
         self.refreshPictureGCP()
-        self.ui.statusbar.showMessage('Reprojections are removed. Pose estimation remains')
+        self.ui.statusbar.showMessage(
+            'Reprojections are removed. Pose estimation remains')
 
-    def itemCross(self, posx, posy, pen, row = None):
+    def itemCross(self, posx, posy, pen, row=None):
         # draw GCP as cross on scene
         rad = self.iconSet.SM
-        x1 = posx-rad; y1 = posy-rad
-        x2 = posx+rad; y2 = posy+rad
-        x12 = posx-rad; y12 = posy+rad
-        x22 = posx+rad; y22 = posy-rad
-        item1 = QGraphicsLineItem(x1,y1,x2,y2,)
-        item2 = QGraphicsLineItem(x12,y12,x22,y22)
-        item1.setPen(pen); item2.setPen(pen)
-        self.scene.addItem(item1); self.scene.addItem(item2)
+        x1 = posx - rad
+        y1 = posy - rad
+        x2 = posx + rad
+        y2 = posy + rad
+        x12 = posx - rad
+        y12 = posy + rad
+        x22 = posx + rad
+        y22 = posy - rad
+        item1 = QGraphicsLineItem(x1, y1, x2, y2,)
+        item2 = QGraphicsLineItem(x12, y12, x22, y22)
+        item1.setPen(pen)
+        item2.setPen(pen)
+        self.scene.addItem(item1)
+        self.scene.addItem(item2)
         if row != None:
-            rowText =  QGraphicsTextItem();
+            rowText = QGraphicsTextItem()
             font = QFont()
-            font.setPixelSize(rad*2)
+            font.setPixelSize(rad * 2)
             rowText.setFont(font)
-            pos = QPointF(posx+rad,posy-rad)
+            pos = QPointF(posx + rad, posy - rad)
             rowText.setPos(pos)
-            rowText.setPlainText(str(row+1));
+            rowText.setPlainText(str(row + 1))
             rowText.setDefaultTextColor(self.iconSet.colorM)
             self.scene.addItem(rowText)
-            
-            
+
     def center(self):
         # center the window in the screen
         qr = self.frameGeometry()
         cp = QDesktopWidget().availableGeometry().center()
         qr.moveCenter(cp)
         self.move(qr.topLeft())
-        
+
     def writeKML(self, est, nord, altitude,  heading, tilt, roll, leftFOV, rightFOV, topFOV, bottomFOV, near):
-       # Write the KML 
-       
-       #The path is the same as the one use for the initialization step
-       path = self.pathToData + "/pose.kml"
-       
-       #Get the name of the saved KML file
-       fName = QFileDialog.getSaveFileName(self,"save file dialog" ,path,"Images (*.kml)");
-       if fName:
-        f = open(fName, 'w')
-        f.write(
-"""<?xml version="1.0" encoding="utf-8"?>
+       # Write the KML
+
+       # The path is the same as the one use for the initialization step
+        path = self.pathToData + "/pose.kml"
+
+        # Get the name of the saved KML file
+        fName = QFileDialog.getSaveFileName(
+            self, "save file dialog", path, "Images (*.kml)")
+        if fName:
+            f = open(fName, 'w')
+            f.write(
+                """<?xml version="1.0" encoding="utf-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
 <PhotoOverlay id="space-needle">
     <name>%s</name>
@@ -990,20 +1093,21 @@ class GetGCPMainWindow(QMainWindow):
       <coordinates>%.10f,%.10f,%.10f</coordinates>      
     </Point>
 </PhotoOverlay>
-</kml>"""  % (self.picture_name, est, nord, altitude, 
-                      heading, tilt, self.picture_name, roll,
-                      leftFOV,rightFOV,bottomFOV,topFOV,near,
-                      est,nord,altitude) ) 
-        f.close()
-            
+</kml>"""  % (self.picture_name, est, nord, altitude,
+                    heading, tilt, self.picture_name, roll,
+                    leftFOV, rightFOV, bottomFOV, topFOV, near,
+                    est, nord, altitude))
+            f.close()
+
+
 class icon_settings():
+
     def __init__(self, Size, resolutionDEM):
-        # settings of GCP visualization
-        self.SM = Size[0]/80.0
-        self.WM = Size[0]/240.0
+            # settings of GCP visualization
+        self.SM = Size[0] / 80.0
+        self.WM = Size[0] / 240.0
         self.SC = 20
         self.WC = 2
         self.colorC = QColor(0, 0, 255)
         self.colorM = QColor(255, 165, 0)
         self.S3d = resolutionDEM
-        

@@ -19,8 +19,3 @@
  *                                                                         *
  ***************************************************************************/
 """
-from pic2Map import Pic2Map
-
-
-def classFactory(iface):
-    return Pic2Map(iface)

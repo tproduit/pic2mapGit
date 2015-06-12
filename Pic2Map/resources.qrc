@@ -1,5 +1,5 @@
 <RCC>
-  <qresource prefix="/plugins/Pic2Map" >
+  <qresource prefix="/plugins/Pic2Map/icons" >
      <file>icon.png</file>
 	 <file>toolbar1.png</file>
 	 <file>toolbar2.png</file>

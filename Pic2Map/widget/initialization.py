@@ -49,6 +49,11 @@ class Initialization_dialog(QtGui.QDialog):
         self.currentPath = '/home'
         self.setAcceptDrops(True)
 
+        self.ui.lineEdit.setText(
+            '/Users/gmilani/Documents/dataTest/07861v.jpg')
+        self.ui.lineEditDEM.setText(
+            '/Users/gmilani/Documents/dataTest/AletschGlacierDEM.tiff')
+
     def dragEnterEvent(self, event):
         event.accept()
 

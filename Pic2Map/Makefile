@@ -70,7 +70,7 @@ QGISDIR=.qgis2
 default: compile
 
 compile: $(COMPILED_RESOURCE_FILES)
-	make -C uis
+	make -C ui
 %_rc.py : %.qrc $(RESOURCES_SRC)
 	pyrcc4 -o $*_rc.py  $<
 

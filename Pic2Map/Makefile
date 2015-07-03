@@ -39,7 +39,7 @@ LOCALES =
 SOURCES = \
 	__init__.py \
 
-PLUGINNAME = PLCS
+PLUGINNAME = Pic2Map
 
 PY_FILES = \
 	plcs.py \

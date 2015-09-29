@@ -179,8 +179,8 @@ class GetGCPMainWindow(QMainWindow):
         self.paramPoseView  = [0,0,0,0,0,0,sqrt(self.sizePicture[0]**2+self.sizePicture[1]**2),self.sizePicture[0]/2.0,self.sizePicture[1]/2.0]
         self.positionFixed = False
         # indice for fixed or free parameters for pose estimation
-        self.whoIsChecked = [True, False]*7
-        self.ui.statusbar.showMessage('Need at least 6 GCP for pose estimation')
+        self.whoIsChecked = [True, False, False]*7
+        self.ui.statusbar.showMessage('Need at least 4 GCP and apriori values or 6 GCP for pose estimation')
                 
     def saveAsKML(self):
         # Save the pose in KML file. It can be open in googleEarth
@@ -306,16 +306,32 @@ class GetGCPMainWindow(QMainWindow):
                     R[2,1] = -cos(heading)*sin(tilt)
                     R[2,2] =  cos(tilt)
                     
-                    not_awesome_vector = array([0,0,-1])
-                    fast_awesome_vector = dot(linalg.inv(R),not_awesome_vector)
-                    awesome_vector = array(fast_awesome_vector)+array([LocalPos[0], LocalPos[1] , altitude])
-                    lookat = array([-awesome_vector[0], awesome_vector[2], awesome_vector[1]])
+                    # Get "look at" vector for openGL pose
+                    ######################################
+                    
+                    #Generate vectors in camera system
+                    dirCam = array([0,0,-1])
+                    upCam = array([1,0,0])
+                    downCam = array([0,1,0])
+                    
+                    #Rotate in the world system
+                    dirWorld = dot(linalg.inv(R),dirCam.T)
+                    lookat_temp = array(dirWorld)+array([LocalPos[0], LocalPos[1] , altitude])
+                    lookat = array([-lookat_temp[0], lookat_temp[2], lookat_temp[1]])
+                    
+                    upWorld = dot(linalg.inv(R),upCam.T) 
+        
+                    #not_awesome_vector = array([0,0,-1])
+                    #fast_awesome_vector = dot(linalg.inv(R),not_awesome_vector)
+                    #awesome_vector = array(fast_awesome_vector)+array([LocalPos[0], LocalPos[1] , altitude])
+                    #lookat = array([-awesome_vector[0], awesome_vector[2], awesome_vector[1]])
                     
                     # Get parameters for pose in openGL
                     self.roll = roll
                     self.FOV = FOV
                     self.pos = pos
                     self.lookat = lookat
+                    self.upWorld = upWorld
                     self.ui.statusbar.showMessage('Pose loaded from KML file.')
                     
                     
@@ -333,8 +349,9 @@ class GetGCPMainWindow(QMainWindow):
     
     def fixFocal(self, focalPixel):
         self.paramPoseView[6] = focalPixel
-        self.whoIsChecked[12] = False
-        self.whoIsChecked[13] = True
+        self.whoIsChecked[19] = False
+        self.whoIsChecked[20] = True
+        self.whoIsChecked[21] = True
 
         
     def zoomOnCross(self):
@@ -366,7 +383,7 @@ class GetGCPMainWindow(QMainWindow):
         
     def call3DView(self):
         # create an openGL window.
-        self.view3D = D3_view(self.pointBuffer, None,  self.roll, self.FOV, 100, self.pos, self.lookat, self.isFrameBufferSupported)
+        self.view3D = D3_view(self.pointBuffer, None,  self.roll, self.FOV, 100, self.pos, self.lookat, self.upWorld, self.isFrameBufferSupported)
         self.view3D.show()
         # emit when left click and Ctrl is pressed
         self.view3D.getGCPIn3DviewSignal.connect(self.getGCPIn3Dview) 
@@ -410,12 +427,19 @@ class GetGCPMainWindow(QMainWindow):
         self.paramPoseView[0] = position[0]
         self.paramPoseView[2] = position[1]+10
         self.paramPoseView[1] = position[2]
+        #X
         self.whoIsChecked[0] = False
         self.whoIsChecked[1] = True
         self.whoIsChecked[2] = False
-        self.whoIsChecked[3] = True
-        self.whoIsChecked[4] = False
-        self.whoIsChecked[5] = True
+        #Y
+        self.whoIsChecked[3] = False
+        self.whoIsChecked[4] = True
+        self.whoIsChecked[5] = False
+        #Z
+        self.whoIsChecked[6] = False
+        self.whoIsChecked[7] = True
+        self.whoIsChecked[8] = False
+        
         self.ui.statusbar.showMessage('Position Fixed. For unfixing, open the pose estimation dialogue box and free the position')
         
     def getGCPIn3Dview(self):
@@ -447,10 +471,16 @@ class GetGCPMainWindow(QMainWindow):
             if not self.poseDialogue.done:
                 raise ValueError
             else:
+                
                 self.lookat = [0,0,0]
                 self.lookat[0] = self.poseDialogue.lookat[0]; self.lookat[2] = self.poseDialogue.lookat[1]; self.lookat[1] = self.poseDialogue.lookat[2]
+                
+                self.upWorld = [0,0,0]
+                self.upWorld[0] = self.poseDialogue.upWorld[0]; self.upWorld[2] = self.poseDialogue.upWorld[1]; self.upWorld[1] = self.poseDialogue.upWorld[2]
+                
                 self.pos = [0,0,0]
                 self.pos[0] = self.poseDialogue.pos[0]; self.pos[2] = self.poseDialogue.pos[1]; self.pos[1] = self.poseDialogue.pos[2]
+                
                 self.FOV = self.poseDialogue.FOV
                 self.roll = self.poseDialogue.roll
                 self.paramPoseView = self.poseDialogue.result
@@ -460,7 +490,7 @@ class GetGCPMainWindow(QMainWindow):
                 self.getPositionInCanvas()
                 self.ui.statusbar.showMessage('You can save GCPs in .dat file or save pose estimation in KML file')
         except ValueError:
-           QMessageBox.warning(self, "Pose - Error","Failed to estimate pose")
+           QMessageBox.warning(self, "Pose Estimation- Error","Failed to estimate pose, consider to provide apriori values")
            
     def getPositionInCanvas(self):
         self.canvas.scene().removeItem(self.poseCanvas)
@@ -493,7 +523,7 @@ class GetGCPMainWindow(QMainWindow):
         size[1] = resolution.height()/2
         size[0] = int(self.sizePicture[0]/float(self.sizePicture[1])*size[1])
         
-        self.refineViewQGL = D3_view(self.pointBuffer, None, self.roll, self.FOV, 0, self.pos, self.lookat, True, [size[0],size[1]])
+        self.refineViewQGL = D3_view(self.pointBuffer, None, self.roll, self.FOV, 0, self.pos, self.lookat, self.upWorld, True, [size[0],size[1]])
         self.refineViewQGL.resize(size[0],size[1])
         self.refineViewQGL.updateGL()
         self.refineViewQGL.show()
@@ -657,7 +687,7 @@ class GetGCPMainWindow(QMainWindow):
         if fSaveName:
             try:
                 self.model.save(fSaveName)
-                self.ui.statusbar.showMessage('GCPS saved')
+                self.ui.statusbar.showMessage('GCPS saved as csv and dat')
             except:
                 QMessageBox.warning(self, "Points - Error",
                         "Failed to save: %s" % e)
@@ -714,7 +744,7 @@ class GetGCPMainWindow(QMainWindow):
         # load GCP from .dat file
         path = self.pathToData + '/GCPs'
         fLoadName = QFileDialog.getOpenFileName(self, 'Load your GCPs',\
-                                                  path,"File (*.dat)")
+                                                  path,"File (*.dat *.csv)")
         if fLoadName:
             try:
                 self.model.load(fLoadName)

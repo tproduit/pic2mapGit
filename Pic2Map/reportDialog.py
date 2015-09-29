@@ -87,10 +87,10 @@ class ReportDialog(QtGui.QDialog):
             test = self.isBehindHill(paramList,errors3D)
             if test:
                 QMessageBox.warning(self, "Reprojection - Warning",
-                        "%i points seem to be reprojected on hill in front of camera" % self.totalPointsOnHill)
+                        "%i GCP seems to be not visible from the camera location! The computed position could be behind relief or within the ground." % self.totalPointsOnHill)
         else: 
             QMessageBox.warning(self, "Reprojection - Warning",
-                    "inconsistent pose")
+                    "inconsistent pose, consider to provide apriori values")
             
     def center(self):
         qr = self.frameGeometry()

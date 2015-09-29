@@ -56,10 +56,11 @@ class D3_view(QGLWidget):
     getGCPIn3DviewSignal = pyqtSignal()
     fixPositionSignal = pyqtSignal(tuple)
     def __init__(self, pointBuffer, picture_name = None, roll = 0, FOV = 30, 
-                 transparency = 100, pos = None, lookat = None, offscreen = False, offscreenSize = [None, None]
+                 transparency = 100, pos = None, lookat = None, upWorld = None, offscreen = False, offscreenSize = [None, None]
                  ,isFramBufferSupported = False, parent = None):
         super(D3_view, self).__init__(parent)
         self.pos = pos
+        self.upWorld = upWorld
         self.lookat = lookat
         self.roll = roll
         self.FOV = FOV
@@ -271,7 +272,8 @@ class D3_view(QGLWidget):
              glLightfv( GL_LIGHT0, GL_POSITION, [0,0,1,1])
              gluLookAt( self.pos[0],  self.pos[1],  self.pos[2],
                     self.lookat[0], self.lookat[1], self.lookat[2],
-                     0.0, cos(self.roll), sin(self.roll))
+                    self.upWorld[0], self.upWorld[1], self.upWorld[2])
+                     #0.0, cos(self.roll), sin(self.roll))
             
              glMatrixMode(GL_PROJECTION)
              glLoadIdentity()
@@ -430,6 +432,8 @@ class D3_view(QGLWidget):
             self.pos = [self.numpy_verts[self.count/4][0], self.numpy_verts[self.count/4][1]*1.5, self.numpy_verts[self.count/4][2]]
         if self.lookat == None:
             self.lookat = self.numpy_verts[self.count/2]
+        if self.upWorld == None:
+            self.upWorld = self.numpy_verts[self.count/2]
         
     def getErrorOnGCP(self, uvtable, XYZTable):
         result = []

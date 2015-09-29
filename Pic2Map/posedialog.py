@@ -21,13 +21,13 @@ from PyQt4.QtGui import *
 from PyQt4.QtCore import *
 from ui_pose import Ui_Pose
 from copy import copy
-from numpy import zeros, array, sin, cos, dot, linalg, pi, asarray, mean, shape, sqrt, flipud, std, concatenate, ones, arccos, arcsin, arctan,arctan2, size, abs, matrix, diag
+from numpy import any, zeros, array, sin, cos, dot, linalg, pi, asarray, mean, shape, sqrt, flipud, std, concatenate, ones, arccos, arcsin, arctan,arctan2, size, abs, matrix, diag, nonzero
 from reportDialog import ReportDialog
 
 
 class Pose_dialog(QtGui.QDialog):
     update = pyqtSignal()
-    def __init__(self, model, paramPosIni, positionFixed,sizePicture, whoIsChecked,pathToData):
+    def __init__(self, model, paramPosIni, positionFixed, sizePicture, whoIsChecked,pathToData):
         #QtGui.QDialog.__init__(self)
         QtGui.QDialog.__init__(self)
         self.uiPose = Ui_Pose()
@@ -57,8 +57,8 @@ class Pose_dialog(QtGui.QDialog):
                     value -= self.sizePicture[1]/2
                 line.setText(str(round(value,3)))
                 indice +=1
-        indice = 0
         
+        indice = 0
         for radio in self.findChildren(QtGui.QRadioButton):
             radio.setChecked(self.whoIsChecked[indice])
             indice +=1
@@ -82,6 +82,7 @@ class Pose_dialog(QtGui.QDialog):
                     "There is currently not estimation of position done with GCPs")
         
     def estimatePose(self):
+        
         #Function called when the user press "Estimate Pose"
         """
         Read the model (table) and get all the values from the 5th first columns
@@ -139,11 +140,23 @@ class Pose_dialog(QtGui.QDialog):
         Parameters 7 and 8 are the central point. It is fixed to the center of image for convenience with openGL
         parameter_bool is an array with 0 if the parameter is fixed, or 1 if the parameter is free
         """
+        
+        #For each radio button (Free, Fixed, Apriori) for each parameters
         for radioButton in self.findChildren(QtGui.QRadioButton):
-            if radioButton.text() == "Fixed":
+            
+            print 'indice', indice
+            
+            if (radioButton.text() == "Free"):
                 if radioButton.isChecked():
-                    # If the parameter is fixed
-                    parameter_bool[indice] = int(0)
+                    print 'freecheck'
+                    parameter_bool[indice] = int(1) # The parameters is free
+                    parameter_list.append(0)
+                     
+            elif (radioButton.text() == "Fixed"):
+                if radioButton.isChecked():
+                    print 'fixcheck'
+                    parameter_bool[indice] = int(0) #The parameters is fixed
+
                     value = float(table[indice].text())
                     if indice == 0:
                         value = -value
@@ -154,10 +167,33 @@ class Pose_dialog(QtGui.QDialog):
                     if indice == 8:
                         value += self.sizePicture[1]/2.0  #central point is displayed in reference to the center of image
                     parameter_list.append(value)
-                else:
-                    # If the parameter is free
-                    parameter_bool[indice] = int(1)
+                    
+            elif (radioButton.text() == "Apriori"): #Apriori
+            
+
+                
+                if radioButton.isChecked():
+                    print 'aprioricvheck'
+                    parameter_bool[indice] = int(2) #The parameters is aprior
+                    
+                    value = float(table[indice].text())
+                    if indice == 0:
+                        value = -value
+                    if indice > 2 and indice < 6:
+                        value *=  pi/180  #angle are displayed in degree
+                    if indice == 7:
+                        value += self.sizePicture[0]/2.0 #central point is displayed in reference to the center of image
+                    if indice == 8:
+                        value += self.sizePicture[1]/2.0  #central point is displayed in reference to the center of image
+                    parameter_list.append(value)
+                
+                #Incrementation of the indice of the parameters (each 3 button)
                 indice += 1
+            
+            else:
+                print boufar
+            print 'parameter_bool', parameter_bool
+            
                 
         # We fix anyway the central point. Future work can take it into account. It is therefore used here as parameter.
         #U0
@@ -171,26 +207,57 @@ class Pose_dialog(QtGui.QDialog):
             #Check if consistency of inputs
             if uv1.shape[0] != xyz.shape[0]:
                 raise ValueError
-            #Check if there is at least 6 points
-            if   uv1.shape[0] < 6:
-                raise IOError
-        except IOError:
-            QMessageBox.warning(self, "Points - Error",
-                    "DLT requires at least 6 calibration points. Only %d points were entered." % (uv1.shape[0]))
+                
+            #Check if there is at least 4 GCP
+            elif (uv1.shape[0] < 4):
+                raise IOError("There are only %d GCP and no apriori values. A solution can not be computed. You can either provide 4 GCP and apriori values (solved with least-square) or 6 GCP (solved with DLT)" % (uv1.shape[0]))
+                
+            #Check if there is at least 4 GCP
+            elif (uv1.shape[0] < 6) and any(parameter_bool[0:7]==1):
+                raise IOError("There are only %d GCP and no apriori values. A solution can not be computed. You can either provide apriori values (solved with least-square) or 6 GCP (solved with DLT)" % (uv1.shape[0]))
+                
+
+            #Check if there is at least 6 GCP
+            #if (uv1.shape[0] < 6) and any(parameter_bool[0:7]==1):
+            #    raise nCorrError2
+                
+        except IOError as x:
+            print x.message
+            QMessageBox.warning(self, "GCP error", x.message)
             self.done = False
+            
         except ValueError:
-            QMessageBox.warning(self, "Points - Error",
+            QMessageBox.warning(self, "GCP - Error",
                     'xyz (%d points) and uv (%d points) have different number of points.' %(xyz.shape[0], uv.shape[0]))
             self.done = False
-        else:
-            #get an initial solution...
-            DltBool = True
-            if DltBool:
-                resultInitialization, L, v = self.DLTMain(xyz,uv1)
-            else:
-                resultInitialization = [0,0,0,pi,0,0,sqrt(self.sizePicture[0]**2+self.sizePicture[0]**2),0,0]
-            #...which is needed for least square adjustment
             
+        else:
+            print 'parameter_bool[0:7]', parameter_bool[0:7]
+            
+            if (xyz.shape[0] >= 6):
+                
+                if any(parameter_bool[0:7]==1):
+                    #There are free values a DLT is performed
+                    print 'Position is fixed but orientation is unknown'
+                    print 'The orientation is initialized with DLT'
+                    
+                    resultInitialization, L, v, up = self.DLTMain(xyz,uv1)
+                else:
+                    #There is only fixed or apriori values LS is performed
+                    print 'There is only fixed or apriori values LS is performed'
+                    resultInitialization = parameter_list
+                    
+
+            else:
+                print 'There are less than 6 GCP: every parameter must be fixed or apriori, LS is performed'
+                resultInitialization = parameter_list
+
+            
+            print 'xyz', xyz
+            print 'uv1', uv1
+            print 'parameter_bool',parameter_bool
+            print 'parameter_list',parameter_list
+            print 'resultInitialization',resultInitialization
             """
             The least square works well only if the initial guess is not too far from the optimal solution
             The DLT algorithm provides good estimates of parameters.
@@ -201,20 +268,20 @@ class Pose_dialog(QtGui.QDialog):
             We take the fixed parameters from the dialog box and give the initial
             guess from the DLT to free parameters. 
             """
-            resultLS, Lproj, vect = self.LS(xyz,uv1,parameter_bool,parameter_list,resultInitialization)
+            resultLS, Lproj, vect, up = self.LS(xyz,uv1,parameter_bool,parameter_list,resultInitialization)
             
             k = 0
-            l = 0
+
             result = [0]*9
             # Length of resultLS is [9 - length of parameter_list]
             # We reconstruct the "result" vector which contains the output parameters
             for i in range(9):
-                if parameter_bool[i]:
+                if (parameter_bool[i]==1) or (parameter_bool[i]==2):
                     result[i] = resultLS[k]
                     k +=1
                 else:
-                    result[i]=parameter_list[l]
-                    l +=1
+                    result[i]=parameter_list[i]
+
             indice = 0
             
             # Set result in the dialog box
@@ -238,6 +305,7 @@ class Pose_dialog(QtGui.QDialog):
             self.result = result
             self.LProj = Lproj
             self.lookat = vect
+            self.upWorld = up
             self.pos = result[0:3]
             # The focal, here calculate in pixel, has to be translated in term of vertical field of view for openGL
             self.FOV = (2*arctan(float(self.sizePicture[1]/2.0)/result[6]))*180/pi 
@@ -257,16 +325,19 @@ class Pose_dialog(QtGui.QDialog):
         # The initial parameters are the ones from DLT but where the radio button is set as free
         x = []
         for i in range(9):
-            if PARAM[i]:
+            if (PARAM[i]==1) or (PARAM[i]==2):
+                #Free or apriori values
                 x.append(x_ini[i])
         x = array(x)
+        print 'x: free or apriori values', x
+        
         # 2D coordinates are understood as observations
         observations = array(observations)
         # 3D coordinates are understood as the abscissas
         abscissa = array(abscissa)
         npoints = size(observations[:,1])
         
-        l_x = int(sum(PARAM));
+        l_x = size(x)#9-size(nonzero(PARAM==0)[0])#int(sum(PARAM))#Number of free parameters
         sigmaobservationservation = 1
         Kl =  zeros(shape=(2*npoints,2*npoints))
         
@@ -308,7 +379,7 @@ class Pose_dialog(QtGui.QDialog):
             # We form therefore the Jacobian matrix
             for i in range(npoints):
                 #ubul and vbul are the prediction with current parameters
-                ubul, vbul = self.dircal(x,abscissa[i,:],x_fix,PARAM)
+                ubul, vbul = self.dircal(x, abscissa[i,:], x_fix, PARAM)
                 # The difference between the observation and prediction is used for parameters update
                 v[2*i-1]=observations[i,0]-ubul
                 v[2*i]=observations[i,1]-vbul
@@ -350,14 +421,15 @@ class Pose_dialog(QtGui.QDialog):
         
         p = zeros(shape=(len(PARAM)))
         m = 0
-        n = 0
+        #n = 0
         for k in range(len(PARAM)):
-            if PARAM[k]:
+            if (PARAM[k]==1) or (PARAM[k]==2):
                 p[k] = x[m]
                 m = m+1
             else:
-                p[k] = x_fix[n]
-                n = n+1
+                p[k] = x_fix[k]
+                #n = n+1
+        print 'p2', p
         L1p = self.CoeftoMatrixProjection(p)
         
         x0 = p[0];
@@ -382,11 +454,24 @@ class Pose_dialog(QtGui.QDialog):
         R[2,2] =  cos(tilt)
         
         # Get "look at" vector for openGL pose
-        not_awesome_vector = array([0,0,-focal])
-        almost_awesome_vector = dot(linalg.inv(R),not_awesome_vector.T)
-        awesome_vector = array(almost_awesome_vector)+array([x0,y0,z0])
+        ######################################
         
-        return x, L1p, awesome_vector
+        #Generate vectors in camera system
+        dirCam = array([0,0,-focal])
+        upCam = array([0,-1,0])
+        downCam = array([0,1,0])
+        
+        #Rotate in the world system
+        dirWorld = dot(linalg.inv(R),dirCam.T)
+        lookat = array(dirWorld)+array([x0,y0,z0])
+        
+        upWorld = dot(linalg.inv(R),upCam.T) 
+        #not_awesome_vector = array([0,0,-focal])
+        #almost_awesome_vector = dot(linalg.inv(R),not_awesome_vector.T)
+        #awesome_vector = array(almost_awesome_vector)+array([x0,y0,z0])
+        
+        
+        return x, L1p, lookat, upWorld#awesome_vector
     
     def CoeftoMatrixProjection(self,x):
         L1p = zeros((4,4))
@@ -570,10 +655,20 @@ class Pose_dialog(QtGui.QDialog):
         swing = arctan2(-R[0,2],-R[1,2])
         azimuth = arctan2(-R[2,0],-R[2,1])
         not_awesome_vector = array([0,0,-1])
-
-        almost_awesome_vector = dot(linalg.inv(R),not_awesome_vector)
-        awesome_vector = array(almost_awesome_vector)+array([x0y0z0[0,0],x0y0z0[1,0],x0y0z0[2,0]])
-        return [x0y0z0[0,0],x0y0z0[1,0],x0y0z0[2,0],tilt,azimuth,swing,focal,u0,v0], L1p ,awesome_vector
+        
+        #Generate vectors in camera system
+        dirCam = array([0,0,-1])
+        upCam = array([0,-1,0])
+        downCam = array([0,1,0])
+        
+        #Rotate in the world system
+        dirWorld = dot(linalg.inv(R),dirCam.T)
+        upWorld = dot(linalg.inv(R),upCam.T) 
+        
+        #almost_awesome_vector = dot(linalg.inv(R),not_awesome_vector)
+        lookat = array(dirWorld)+array([x0y0z0[0,0],x0y0z0[1,0],x0y0z0[2,0]])
+        
+        return [x0y0z0[0,0],x0y0z0[1,0],x0y0z0[2,0],tilt,azimuth,swing,focal,u0,v0], L1p, lookat, upWorld#awesome_vector
     
     def rq(self, A): 
          Q,R = linalg.qr(flipud(A).T)
@@ -586,14 +681,15 @@ class Pose_dialog(QtGui.QDialog):
     def dircal(self,x_unkown,abscissa,x_fix,PARAM):
         p = zeros(shape=(len(PARAM)))
         m = 0
-        n = 0
+        #n = 0
         for k in range(len(PARAM)):
-            if PARAM[k]:
+            if (PARAM[k]==1) or (PARAM[k]==2): #Apriori or free
                 p[k] = x_unkown[m]
                 m = m+1
             else:
-                p[k] = x_fix[n]
-                n = n+1
+                p[k] = x_fix[k]###############
+                #n = n+1
+
         x1 = abscissa[0];
         y1 = abscissa[1];
         z1 = abscissa[2];

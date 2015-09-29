@@ -32,9 +32,16 @@ from OpenGL.arrays import ArrayDatatype as ADT
 from osgeo import gdal, osr
 from PIL import Image
 
+from scipy import interpolate, misc
+import numpy as np
+import matplotlib.pyplot as plt
+from osgeo import ogr
+
+
 
 class viewOrtho_class(QGLWidget):
     getBound =  pyqtSignal(list)# Emit the bounding box for saving the drapped picture
+    
     def __init__(self, pointBuffer, picture_name, modelview, projection, viewport,
                   textCoord, orthoSavedParam = 0, crs = None, meterPerPixel = None, demName = None, isFrameBufferSupported = False):
         super(viewOrtho_class, self).__init__()
@@ -60,13 +67,13 @@ class viewOrtho_class(QGLWidget):
         self.demName = demName
         self.isFrameBufferSupported = isFrameBufferSupported
         
+        #self.Xmat = Xmat
+        #self.Ymat = Ymat #20150823
+        
         self.countVertices = len(self.numpy_verts)
-        print self.countVertices
-        print self.l_nord
+
         index = (self.countVertices)/2
-        print self.numpy_verts[index][0]
-        print self.numpy_verts[index][2]
-        print index
+
         #Initialize the pink bounding box
         indexLD = (self.countVertices+self.l_nord*3)/4
         indexRU = (self.countVertices*3+self.l_nord)/4
@@ -88,7 +95,7 @@ class viewOrtho_class(QGLWidget):
                 x = event.x()
                 y = float(self.viewport_new[3]) -event.y()
                 z = glReadPixels( x, y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT)
-                print x,y,z
+                #print x,y,z
                 result = gluUnProject( x, y, z, self.modelview_new, self.projection_new, self.viewport_new)
                 self.boxLeftUp = [result[0],result[2]]
                 self.boxRightDown = [result[0],result[2]]
@@ -314,3 +321,389 @@ class viewOrtho_class(QGLWidget):
     def getMaxBufferSize(self):
         return glGetIntegerv(GL_MAX_RENDERBUFFER_SIZE)
             
+class orthoClass():
+    
+    def __init__(self, Xmat, Ymat, minX, maxX, minY, maxY, resol, image, crs):
+        
+        self.Xmat = Xmat
+        self.Ymat = Ymat
+        
+        self.minX = minX
+        self.minY = minY
+        self.maxX = maxX
+        self.maxY = maxY
+        print minX, minY, maxX, maxY, 'mima'
+        
+        self.resol = resol
+        
+        self.image = image
+        
+        self.crs = crs
+        
+    def computeOrtho(self, drappingMain):
+        
+        #Interpolate X and Y to reach the full resolution of the image
+        self.interpolateXYim()
+        
+        #Make an array with the matrix, suppress 0 values
+        self.makeLineSuppress0(image=self.image)
+        
+        #Generate coordinates of the ortho
+#        Xmax = np.max(imXfullLine)
+#        Ymax = np.max(imYfullLine)
+#        Xmin = np.min(imXfullLine)
+#        Ymin = np.min(imYfullLine)
+#        
+#        print Xmax
+#        print Ymax
+#        print Xmin
+#        print Ymin
+        
+        #Interpolate the ortho
+        self.orthoInterpolation()#imXfullLine, imYfullLine, imLine)
+        
+        #Make an array with the matrix, suppress 0 values
+        self.makeLineSuppress0(image = None)
+        
+        self.generatePointRasterLayer()
+    
+        self.generateMask() 
+        
+        self.maskOrtho()
+        
+        self.saveTiff(drappingMain)
+        
+        
+    def interpolateXYim(self):
+
+        newWidth = self.image.shape[1]
+        newHeight = self.image.shape[0]
+        
+        imX = self.Xmat
+        imY = self.Ymat
+    
+        imX[imX == 0.] = np.nan
+        imY[imY == 0.] = np.nan
+    
+        imX = misc.imresize(imX,(newHeight, newWidth), interp = 'bicubic', mode = 'F')
+        imY = misc.imresize(imY,(newHeight, newWidth), interp = 'bicubic', mode = 'F')
+        
+        self.Xmat = imX
+        self.Ymat = imY
+
+        
+    def makeLineSuppress0(self, image = None):
+        
+        imX = self.Xmat
+        imY = self.Ymat
+        im = image
+        
+        #Create an array with the matrix of coordinates
+        imXLine = imX.reshape((1, imX.shape[0]*imX.shape[1]))
+        imYLine = imY.reshape((1, imX.shape[0]*imX.shape[1]))
+        
+        #Suppress Nan values
+        id0 = np.nonzero(np.isnan(imXLine)==1)
+        
+        imXLine = np.delete(imXLine, id0)
+        imYLine = np.delete(imYLine, id0)
+        
+        im = image
+        
+        if im != None:
+            
+            #Create an array with the image
+            nDim = np.ndim(im)
+    
+            if nDim == 2:
+                imLine = im.reshape((1, im.shape[0]*im.shape[1]))
+                imLine = np.delete(imLine, id0)
+    
+            elif nDim == 3:
+    
+                imLine = np.zeros((im.shape[2], imYLine.shape[0]))#######
+    
+                for i in range(im.shape[2]):
+    
+                    imTempLine = im[:,:,i].reshape((1, im.shape[0]*im.shape[1]))
+                    imLine[i,:] = np.delete(imTempLine, id0)
+    
+            self.imLine = imLine
+        
+        self.XLine = imXLine
+        self.YLine = imYLine
+
+    
+    def orthoInterpolation(self):
+        
+        imXLine = self.XLine
+        imYLine = self.YLine
+        imLine = self.imLine
+        
+        Xmin = self.minX
+        Ymin = self.minY
+        Xmax = self.maxX
+        Ymax = self.maxY
+        
+        resol = self.resol
+        
+        #Interpolate the ortho from the projected image pixels
+        imPoints = np.vstack((imXLine, imYLine))
+    
+        #Generate ortho coordinates
+        grid_x, grid_y = np.mgrid[Xmin:Xmax:resol, Ymax:Ymin:-resol]
+    
+        #interpolation of the three bands
+        if imLine.shape[0]==3:
+            grid_z0 = np.uint8(interpolate.griddata(imPoints.T, np.squeeze(imLine[0,:]), (grid_x,grid_y), method='nearest'))
+            grid_z1 = np.uint8(interpolate.griddata(imPoints.T, np.squeeze(imLine[1,:]), (grid_x,grid_y), method='nearest'))
+            grid_z2 = np.uint8(interpolate.griddata(imPoints.T, np.squeeze(imLine[2,:]), (grid_x,grid_y), method='nearest'))
+    
+            #Stack the bands
+            grid = np.dstack([grid_z0, grid_z1, grid_z2])
+            
+        else:
+            
+            grid = np.uint8(interpolate.griddata(imPoints.T, np.squeeze(imLine), (grid_x,grid_y), method='linear'))
+            
+        #plt.imshow(grid)
+        #plt.colorbar()
+        #plt.show()
+        
+        self.ortho = grid
+    
+    def generatePointRasterLayer(self):
+        
+        imXLine = self.XLine
+        imYLine = self.YLine
+        ortho = self.ortho
+        Xmin = self.minX
+        Ymin = self.minY
+        Xmax = self.maxX
+        Ymax = self.maxY
+        
+        resol = self.resol
+        
+        # Save extent to a new Shapefile
+        pointDriver = ogr.GetDriverByName("MEMORY")
+        pointDataSource = pointDriver.CreateDataSource('memData')
+    
+        #open the memory datasource with write access
+        #tmp=pointDriver.Open('memData',1)
+    
+        
+        
+        self.epsg = int(self.crs.authid().split(':')[1])
+        
+        pointLayerSRS = osr.SpatialReference()
+        pointLayerSRS.ImportFromEPSG(self.epsg)
+        
+        pointLayer = pointDataSource.CreateLayer("Points", pointLayerSRS, geom_type=ogr.wkbPoint)
+        
+        #pointLayer.SetProjection(pointLayerSRS.ExportToWkt())
+    
+        # Add an ID field
+        idField = ogr.FieldDefn("id", ogr.OFTInteger)
+        pointLayer.CreateField(idField)
+    
+        # Create the feature and set values
+        featureDefn = pointLayer.GetLayerDefn()
+        feature = ogr.Feature(featureDefn)
+        
+        # Fill the layer with points
+        for i in range(imXLine.shape[0]):
+            
+            points = ogr.Geometry(ogr.wkbPoint)
+            points.AddPoint(float(imXLine[i]), float(imYLine[i]))
+    
+            feature.SetGeometry(points)
+            feature.SetField("id", 1)
+            pointLayer.CreateFeature(feature)
+    
+        # Close DataSource
+        #outDataSource.Destroy()
+        
+        
+        #Generate rasterized point layer
+        #-------------------------------
+        cols = ortho.shape[0]
+        rows = ortho.shape[1]
+    
+        originX = Xmin
+        originY = Ymax
+        
+        #print Xmin, Ymin, 'min Point raster'
+        pixelWidth = resol
+        pixelHeight = resol
+    
+        driver = gdal.GetDriverByName('MEM')
+        pointRaster = driver.Create('memory', cols, rows, 1, gdal.GDT_UInt16)
+        pointRaster.SetGeoTransform((originX, pixelWidth, 0, originY, 0, -pixelHeight))
+    
+        #pointBand = pointRaster.GetRasterBand(1)
+        #outband.WriteArray(boolMat)
+        
+        pointRasterSRS = osr.SpatialReference()
+        pointRasterSRS.ImportFromEPSG(self.epsg)
+    
+        pointRaster.SetProjection(pointRasterSRS.ExportToWkt())
+    
+        #pointBand.FlushCache()
+        
+        #Fill layer
+        #----------
+        gdal.RasterizeLayer(pointRaster, [1], pointLayer)#, outLayer)
+    
+        #pointBand = pointRaster.GetRasterBand(1)
+        #array = pointBand.ReadAsArray()
+        
+        #plt.imshow(array)
+        #plt.show()
+    
+        self.pointRaster = pointRaster
+    
+    def generateMask(self):
+        
+        resol = self.resol
+        pointRaster = self.pointRaster
+        
+        pointBand = pointRaster.GetRasterBand(1)
+        array = pointBand.ReadAsArray()
+    
+        #plt.imshow(array)
+        #plt.show()
+        
+        cols = pointRaster.RasterXSize
+        rows = pointRaster.RasterYSize
+    
+        geoTrans = pointRaster.GetGeoTransform()
+        geoTrans = list(geoTrans)
+        x_min = geoTrans[0]
+        pixelWidth = geoTrans[1]
+        y_max = geoTrans[3]
+        pixelHeight = geoTrans[5]
+        
+        #print x_min, y_min, pixelWidth, pixelHeight, 'min height'
+    
+        
+        #Generate distance layer
+        #-----------------------
+        driver = gdal.GetDriverByName('MEM')
+        distRaster = driver.Create('memory', cols, rows, 1, gdal.GDT_UInt16)
+        distRaster.SetGeoTransform((x_min, pixelWidth, 0, y_max, 0, pixelHeight))
+        outband = distRaster.GetRasterBand(1)
+        #outband.WriteArray(boolMat)
+        outRasterSRS = osr.SpatialReference()
+        outRasterSRS.ImportFromEPSG(self.epsg)
+        distRaster.SetProjection(outRasterSRS.ExportToWkt())
+        outband.FlushCache()
+    
+        gdal.ComputeProximity(pointRaster.GetRasterBand(1), outband)
+    
+        distBand = distRaster.GetRasterBand(1)
+        array = distBand.ReadAsArray()
+    
+        #plt.imshow(array)
+        #plt.show()
+        
+        idDel = np.nonzero(array>=resol)
+        mask = np.zeros(array.shape)
+        mask[idDel]= 1
+        
+        #plt.imshow(mask)
+        #plt.show()
+        
+        self.mask = mask
+    
+    def maskOrtho(self):
+        
+        mask = self.mask
+        ortho = self.ortho
+        
+        idHide = np.nonzero(mask==1)
+        
+        nDim = ortho.ndim
+        
+        if nDim == 2:
+            
+            newOrtho = ortho.T
+            newOrtho[idHide]=0
+            
+        else:
+            for i in range(ortho.shape[2]):
+                
+                curOrtho = ortho[:,:,i]
+                curOrtho = curOrtho.T
+                curOrtho[idHide] = 0
+                
+                if i == 0:
+                    newOrtho = curOrtho
+                else:
+                    newOrtho = np.dstack([newOrtho, curOrtho])
+            
+        self.ortho = newOrtho
+        
+        #plt.imshow(newOrtho)
+        #plt.show()
+        
+        
+    def saveTiff(self, drappingMain):
+        
+        rasterPath = QFileDialog.getSaveFileName(drappingMain,"save file dialog" ,"/ortho.tiff","Images (*.tiff)")
+        
+        maskedOrtho = self.ortho
+        pointRaster = self.pointRaster
+        im = self.image
+        
+        if rasterPath:
+                    
+            cols = pointRaster.RasterXSize
+            rows = pointRaster.RasterYSize
+            
+            geoTrans = pointRaster.GetGeoTransform()
+            geoTrans = list(geoTrans)
+            x_min = geoTrans[0]
+            pixelWidth = geoTrans[1]
+            y_min = geoTrans[3]
+            pixelHeight = geoTrans[5]
+            print x_min, y_min, 'saveortho'
+            print self.crs.srsid(), 'crs'
+            
+            nDim = np.ndim(im)
+            if nDim == 3:
+                nBand = im.shape[2]
+                print nBand
+                
+                driver = gdal.GetDriverByName('GTiff')
+                outRaster = driver.Create(rasterPath, cols, rows, nBand, gdal.GDT_UInt16)
+                outRaster.SetGeoTransform((x_min, pixelWidth, 0, y_min, 0, pixelHeight))
+                
+                for i in range(nBand):
+                    outband = outRaster.GetRasterBand(i+1)
+                    outband.WriteArray(np.uint16(maskedOrtho[:,:,i]))
+                    outband.FlushCache()
+                outRasterSRS = osr.SpatialReference()
+                outRasterSRS.ImportFromEPSG(self.epsg)
+                outRaster.SetProjection(outRasterSRS.ExportToWkt())
+                outRaster = None
+                
+#            driver = gdal.GetDriverByName('GTiff')
+#            outRaster = driver.Create(rasterSaveName, cols, rows, 1, gdal.GDT_UInt16)
+#            outRaster.SetGeoTransform((originX, pixelWidth, 0, originY, 0, pixelHeight))
+#            outband = outRaster.GetRasterBand(1)
+#            outband.WriteArray(boolMat)
+#            outRasterSRS = osr.SpatialReference()
+#            outRasterSRS.ImportFromEPSG(self.crs.srsid ())#2056)
+#            outRaster.SetProjection(outRasterSRS.ExportToWkt())
+                
+            else:
+                driver = gdal.GetDriverByName('GTiff')
+                outRaster = driver.Create(rasterPath, cols, rows, 1, gdal.GDT_UInt16)
+                outRaster.SetGeoTransform((x_min, pixelWidth, 0, y_min, 0, pixelHeight))
+                outband = outRaster.GetRasterBand(1)
+                outband.WriteArray(np.uint16(maskedOrtho))
+                outRasterSRS = osr.SpatialReference()
+                outRasterSRS.ImportFromEPSG(self.epsg)
+                outRaster.SetProjection(outRasterSRS.ExportToWkt())
+                outband.FlushCache()
+                outRaster = None

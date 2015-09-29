@@ -71,27 +71,57 @@ class Ui_Monoplotter(object):
         self.spinBox.setMaximum (2000)
         self.spinBox.setButtonSymbols(QtGui.QAbstractSpinBox.NoButtons)
         self.verticalLayout.addWidget(self.spinBox)
+        
+        #Measure 2D button
         self.measureButton = QtGui.QPushButton(self.dockWidgetContents)
         self.measureButton.setObjectName(_fromUtf8("measureButton"))
         self.verticalLayout.addWidget(self.measureButton)
+        
+        #Measure 3D button
         self.measure3D = QtGui.QPushButton(self.dockWidgetContents)
         self.measure3D.setObjectName(_fromUtf8("measure3D"))
         self.verticalLayout.addWidget(self.measure3D)
+        
+        #Orthorectification
         self.pushButton = QtGui.QPushButton(self.dockWidgetContents)
         self.pushButton.setObjectName(_fromUtf8("pushButton"))
         self.verticalLayout.addWidget(self.pushButton)
+        
+        #Save image button
         self.saveButton = QtGui.QPushButton(self.dockWidgetContents)
         self.saveButton.setObjectName(_fromUtf8("saveButton"))
         self.verticalLayout.addWidget(self.saveButton)
+        
+        #Refresh button
         self.refreshButton = QtGui.QPushButton(self.dockWidgetContents)
         self.refreshButton.setObjectName(_fromUtf8("refreshButton"))
         self.verticalLayout.addWidget(self.refreshButton)
+        
+        #
         self.buttonLabel = QtGui.QPushButton(self.dockWidgetContents)
         self.buttonLabel.setObjectName(_fromUtf8("buttonLabel"))
         self.verticalLayout.addWidget(self.buttonLabel)
-        self.activatePolygon = QtGui.QPushButton(self.dockWidgetContents)
-        self.activatePolygon.setObjectName(_fromUtf8("activatePolygon"))
-        self.verticalLayout.addWidget(self.activatePolygon)
+        
+        #
+        #self.activatePolygon = QtGui.QPushButton(self.dockWidgetContents)
+        #self.activatePolygon.setObjectName(_fromUtf8("activatePolygon"))
+        #self.verticalLayout.addWidget(self.activatePolygon)
+        
+        #Save XYZ button
+        self.saveXYZmatrix = QtGui.QPushButton(self.dockWidgetContents)
+        self.saveXYZmatrix.setObjectName(_fromUtf8("saveXYZmatrix"))
+        self.verticalLayout.addWidget(self.saveXYZmatrix)
+        
+        #Interception angle and surface analysis button
+        self.analysis = QtGui.QPushButton(self.dockWidgetContents)
+        self.saveXYZmatrix.setObjectName(_fromUtf8("analysis"))
+        self.verticalLayout.addWidget(self.analysis)
+        
+        #Footprint and mask
+        self.footprint = QtGui.QPushButton(self.dockWidgetContents)
+        self.footprint.setObjectName(_fromUtf8("footprint"))
+        self.verticalLayout.addWidget(self.footprint)
+        
         spacerItem = QtGui.QSpacerItem(20, 40, QtGui.QSizePolicy.Minimum, QtGui.QSizePolicy.Expanding)
         self.verticalLayout.addItem(spacerItem)
         if not useOrthoImage:
@@ -122,11 +152,17 @@ class Ui_Monoplotter(object):
         self.label.setText(_translate("Monoplotter", "Window Size:", None))
         self.measureButton.setText(_translate("Monoplotter", "Measure on plane", None))
         self.measure3D.setText(_translate("Monoplotter", "Measure 3D", None))
-        self.pushButton.setText(_translate("Monoplotter", "Drape on DEM", None))
+        self.pushButton.setText(_translate("Monoplotter", "Orthorectification", None))
         self.saveButton.setText(_translate("Monoplotter", "Save Image", None))
         self.refreshButton.setText(_translate("Monoplotter", "Refresh Layers", None))
         self.buttonLabel.setText(_translate("Monoplotter", "Labels Settings", None))
-        self.activatePolygon.setText(_translate("Monoplotter", "Enable Polygons", None))
+        #self.activatePolygon.setText(_translate("Monoplotter", "Enable Polygons", None))
+        
+        self.saveXYZmatrix.setText(_translate("Monoplotter", "Save XYZ matrix", None))#
+        
+        self.analysis.setText(_translate("Monoplotter", "Geometry analysis", None))
+        
+        self.footprint.setText(_translate("Monoplotter", "Footprint", None))
         
         if not useOrthoImage:
             self.label_2.setText(_translate("Monoplotter", "DEM transparency", None))

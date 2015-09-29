@@ -162,6 +162,9 @@ class Pic2Map:
         viewport = self.monoplotter.qgl_window.viewport
         texture = self.monoplotter.texture
         
+        Xmat = self.monoplotter.Xmat
+        Ymat = self.monoplotter.Ymat #20150823
+        
         # Create the window for ortho-rectification
         self.drappingInstance = drappingMain(self.buffers, self.picture_name,
                                           modelview,
@@ -170,7 +173,9 @@ class Pic2Map:
                                           texture,
                                           self.crs,
                                           self.DEM_name,
-                                          self.isFrameBufferSupported)
+                                          self.isFrameBufferSupported,
+                                          Xmat,
+                                          Ymat)#20150923
         self.drappingInstance.setWindowModality(Qt.ApplicationModal)
         self.drappingInstance.show()
         
@@ -192,7 +197,8 @@ class Pic2Map:
           self.ParamPose = [self.gcpMainWindow.pos, self.gcpMainWindow.lookat, self.gcpMainWindow.FOV, self.gcpMainWindow.roll]
       else:
           raise  IOError
-          
+      
+      print self.crs.srsid(), 'crs3'
       # launch monoplotter
       self.monoplotter = MonoplotterMainWindow(self.iface,
                                                self.buffers,
@@ -203,7 +209,8 @@ class Pic2Map:
                                                self.pathToData,
                                                self.crs,
                                                self.DEM_name,
-                                               self.isFrameBufferSupported)
+                                               self.isFrameBufferSupported,
+                                               self.demMax, self.demMin)#
       self.monoplotter.show()
       self.monoplotter.qgl_window.updateGL()
       self.monoplotter.openOrtho.connect(self.openOrthoWidget)
@@ -274,9 +281,16 @@ class Pic2Map:
           baseName = fileInfo.baseName()
           rlayer2 = QgsRasterLayer(fileName, baseName)
           self.dem_box = rlayer2.extent()
+          
+          provider = rlayer2.dataProvider()
+          stats = provider.bandStatistics(1, QgsRasterBandStats.All,self.dem_box, 0)
+          self.demMin = stats.minimumValue
+          self.demMax = stats.maximumValue
+          
          
           # Get coordinate system
           self.crs = rlayer2.crs()
+         
           # check if the map units are meter
           if self.crs.mapUnits() != 0:
               raise CRSERROR

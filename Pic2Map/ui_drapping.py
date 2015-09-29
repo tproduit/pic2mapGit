@@ -120,6 +120,6 @@ class Ui_drapping(object):
         self.label_4.setText(_translate("Ui_drapping", "TextLabel", None))
         self.label_3.setText(_translate("Ui_drapping", "TextLabel", None))
         self.label_6.setText(_translate("Ui_drapping", "TextLabel", None))
-        self.label_7.setText(_translate("Ui_drapping", "Redraw the bounding box from\nup-left to down-right direction.", None))
+        self.label_7.setText(_translate("Ui_drapping", "Draw the bounding box \nfrom up-left to \ndown-right direction.", None))
         self.saveButton.setText(_translate("Ui_drapping", "Save raster", None))
 

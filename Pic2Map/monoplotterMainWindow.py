@@ -27,25 +27,47 @@ from qgis.gui import *
 from QGL_monoplotter import QGLMonoplotter
 from ui_monoplotter import Ui_Monoplotter
 from drapping import drappingMain
-from numpy import zeros, concatenate, dot, linalg, pi, arctan2, ones, array
 from ui_buffering import Ui_progressBar
 from labelSettingsDialog import label_dialog
 from measure3D import mesure3DDialog
 from ortho import viewOrtho_class
 import os
 import ogr
+
+import Image
+
+from scipy import misc
+from scipy.spatial import KDTree
+
+from numpy import zeros, concatenate, dot, linalg, pi, arctan2, ones, array
+import numpy as np
+
+import matplotlib.pyplot as plt
+from matplotlib import colors
+
+#from matplotlib.figure import Figure
+#from matplotbib import axes
+
 from osgeo import gdal, osr
 
+#from PyQt4.QtOpenGL import *
+#from OpenGL.GLU import *
+#from OpenGL.GL.framebufferobjects import *
+from OpenGL.GL import *
+
 class MonoplotterMainWindow(QtGui.QMainWindow):
+    
     openOrtho = pyqtSignal()
     clearMapTool= pyqtSignal()
     closingMonoplot = pyqtSignal()
     
-    def __init__(self, iface, pointBuffer, picture_name, ParamPose, dem_box, cLayer,pathToData, crs,demName,isFrameBufferSupported):
+    def __init__(self, iface, pointBuffer, picture_name, ParamPose, dem_box, cLayer,pathToData, crs,demName, isFrameBufferSupported, demMax, demMin):
         QtGui.QMainWindow.__init__(self)
         self.iface = iface
         self.cLayer = cLayer
         self.dem_box = dem_box
+        self.demMax = demMax
+        self.demMin = demMin
         self.ParamPose = ParamPose
         self.picture_name = picture_name
         self.pointBuffer = pointBuffer
@@ -55,7 +77,7 @@ class MonoplotterMainWindow(QtGui.QMainWindow):
         self.isFrameBufferSupported = isFrameBufferSupported
         self.useOrthoImage = isinstance(self.pointBuffer.m_normal,int)
         self.haveMask = False
-        self.polygonActivated = False
+        #self.polygonActivated = False
         
         self.ui = Ui_Monoplotter()
         self.qgl_window = QGLMonoplotter(pointBuffer, picture_name,ParamPose)
@@ -63,7 +85,7 @@ class MonoplotterMainWindow(QtGui.QMainWindow):
         img = QImage(picture_name)
         resolution = QDesktopWidget().screenGeometry()
         size = [0,0]
-        size[1] = resolution.height()/2
+        size[1] = resolution.height()/1.5#2
         self.ratio = img.width()/float( img.height())
         size[0] = int(self.ratio*size[1])
         self.ui.setupUi(self, self.useOrthoImage)
@@ -75,9 +97,25 @@ class MonoplotterMainWindow(QtGui.QMainWindow):
         self.ui.saveButton.clicked.connect(self.saveImage)
         self.ui.spinBox.setValue(size[1])
         self.ui.spinBox.editingFinished.connect(self.resizeMonoplotter)
+        
+        #Connect the orthorectification button with its function
         self.ui.pushButton.clicked.connect(self.getOrtho)
+        
+        #Label
         self.ui.buttonLabel.clicked.connect(self.openLabelSettings)
-        self.ui.activatePolygon.clicked.connect(self.activatePolygonVisualization)
+        
+        #
+        #self.ui.activatePolygon.clicked.connect(self.activatePolygonVisualization)
+        
+        #Save XYZ matrix
+        self.ui.saveXYZmatrix.clicked.connect(self.saveXYZmatrix)#
+        self.noSave = False
+        
+        #Connect the analysis button with its function
+        self.ui.analysis.clicked.connect(self.analysis)
+        
+        #Connect the footprint button with its function
+        self.ui.footprint.clicked.connect(self.footprint)
         
         if not self.useOrthoImage:
             self.ui.horizontalSlider.valueChanged.connect(self.changeTransparency)
@@ -86,16 +124,476 @@ class MonoplotterMainWindow(QtGui.QMainWindow):
         self.ui.measure3D.toggled.connect(self.startMeasure3D)
         self.isMeasuring3D = False
         
+    def analysis(self):
         
-    def activatePolygonVisualization(self):
-        if self.polygonActivated == False:
-            self.polygonActivated = True
-            self.qgl_window.polygonActivated = True
-            self.ui.activatePolygon.setText('Disable Polygons')
-        elif self.polygonActivated == True:
-            self.polygonActivated = False
-            self.qgl_window.polygonActivated = False
-            self.ui.activatePolygon.setText('Enable Polygons')
+        #If the coordinates are not yet computed
+        #try:
+        #    a = self.Xmat.shape[0]
+        #except:
+        #    self.saveXYZmatrix()
+        
+        if hasattr(self, 'Xmat') == False:
+            self.noSave = True
+            self.saveXYZmatrix()
+            
+        #Compute the reduced image
+        newWidth = 500
+        ratio = float(newWidth)/self.Xmat.shape[1]
+        newHeight = int(ratio*self.Xmat.shape[0])
+        
+        imX = misc.imresize(self.Xmat,(newHeight, newWidth), interp = 'nearest', mode = 'F')
+        imY = misc.imresize(self.Ymat,(newHeight, newWidth), interp = 'nearest', mode = 'F')
+        imZ = misc.imresize(self.Zmat,(newHeight, newWidth), interp = 'nearest', mode = 'F')
+        
+        step = 2 #jump above one pixel: fasten computation,
+        sMat = np.zeros((imX.shape[0]/step, imX.shape[1]/step))
+        
+        las = []
+        
+        #Loop over each pixel
+        ii = 0
+        for i in range(0,imX.shape[0]-step,step):
+            jj = 0
+            for j in range(0,imX.shape[1]-step,step):
+                
+                if (imX[i,j]!=0) and (imX[i,j+step]!=0) and(imX[i+step,j]!=0) and (imX[i+step,j+step]!=0):
+                    
+                    #Compute the surface of a polygon with four vertices
+                    ####################################################
+                    
+                    #Get coordinates of the the four pixels
+                    UL = np.asarray([imX[i,j], imY[i,j]])
+                    UR = np.asarray([imX[i+step,j], imY[i+step,j]])
+                    LL = np.asarray([imX[i,j+step], imY[i,j+step]])
+                    LR = np.asarray([imX[i+step,j+step], imY[i+step,j+step]])
+                    
+                    #Generate four unit vectors
+                    a = np.linalg.norm(UL-UR)
+                    c = np.linalg.norm(LL-LR)
+                    b = np.linalg.norm(UL-LL)
+                    d = np.linalg.norm(UR-LR)
+                    
+        
+                    unita = (UL-UR)/a
+                    unitb = (UL-LL)/b
+                    unitc = (LL-LR)/c
+                    unitd = (UR-LR)/d
+                    
+                    #Compute angle between vectors
+                    alpha = np.arccos(np.dot(unita,unitd))
+                    gamma = np.arccos(np.dot(unitb,unitc))
+                    
+                    #Compute the surface of two triangles
+                    s = (0.5* a * d * np.sin(alpha)) + (0.5 * b * c * np.sin(gamma))
+                    if np.isnan(s):
+                        sMat[ii,jj] = 0
+                    elif s < 0:
+                        sMat[ii,jj] = 0
+                    else:
+                        sMat[ii,jj] = s
+                        
+                    if np.isnan(s):
+                        las.append(0)
+                    elif s < 0:
+                        las.append(0)
+                    else:
+                        las.append(s)
+                jj+=1
+            ii+=1
+            
+        idBigMat = np.nonzero(sMat > 15*np.median(las))
+        
+        sMat[idBigMat]=0
+        
+
+        
+        #Compute angle between viewing vector and terrain
+        #################################################
+        print 'compute alpha mat'
+        step=2
+        alphaMat = np.zeros((imX.shape[0]/step, imX.shape[1]/step))
+        
+        ii = 0
+        for i in range(0,imX.shape[0]-step,step):
+            jj = 0
+            for j in range(0,imX.shape[1]-step,step):
+                
+                if (imX[i,j]!=0) and (imX[i,j+step]!=0) and(imX[i+step,j]!=0) and (imX[i+step,j+step]!=0):
+                    
+                    UL = np.asarray([imX[i,j], imY[i,j], imZ[i,j]])
+                    UR = np.asarray([imX[i+step,j], imY[i+step,j], imZ[i+step,j]])
+                    LL = np.asarray([imX[i,j+step], imY[i,j+step], imZ[i,j+step]])
+        
+                    #Estimate a plane from three points
+                    a = UL-UR
+                    b = UL-LL
+                    normal = np.cross(a,b)
+                    if normal[2]<0: #Vector is point up
+                        normal = -normal
+                    
+                    #Vector camera ground
+                    pos = self.ParamPose[0]
+                    XYZcam = np.asarray([pos[0], pos[2],pos[1]])
+                    c = UL-XYZcam
+                    
+                    #Angle between the ray and the normal
+                    res = np.arctan2(np.linalg.norm(np.cross(normal,c)), np.dot(normal,c))*180/np.pi
+                    res = np.min([res,180-res])
+                    
+                    #Angle between the ray and the plane
+                    res = 90-res
+                    
+                    alphaMat[ii,jj]=res
+                jj+=1
+            ii+=1
+            
+        
+
+        #alphaLine = alphaMat.reshape((1, alphaMat.shape[0]*alphaMat.shape[1]))
+        
+        #plt.hist(alphaLine[0,0:1000])
+        #plt.show()
+        
+        cmap = colors.ListedColormap(['white', 'red', 'orange', 'green'])
+        bounds=[0, 0.01, 30, 60, 90]
+        norm = colors.BoundaryNorm(bounds, cmap.N)
+        
+        plt.figure(1)
+        
+        #Show surface of the pixels
+        plt.subplot(221)
+        plt.imshow(sMat, interpolation = 'None')
+        plt.colorbar()
+        plt.title('Surface of the pixels')
+        plt.show()
+        
+        plt.subplot(222)
+        plt.imshow(alphaMat, interpolation = 'None')
+        plt.title('Angle between a ray and the DEM')
+        plt.colorbar()
+        
+        plt.subplot(223)
+        plt.imshow(alphaMat, interpolation='nearest', cmap=cmap, norm=norm)
+        plt.colorbar()
+        plt.title('Angle between a ray and the DEM')
+        
+        plt.show()
+        
+        self.noSave = False
+            
+    def footprint(self):
+        
+        #If the coordinates are not yet computed
+        if hasattr(self, 'Xmat') == False:
+            self.noSave = True
+            self.saveXYZmatrix()
+            
+        #Compute the reduced image
+        newWidth = 500
+        ratio = float(newWidth)/self.Xmat.shape[1]
+        newHeight = int(ratio*self.Xmat.shape[0])
+        
+        imX = misc.imresize(self.Xmat,(newHeight, newWidth), interp = 'nearest', mode = 'F')
+        imY = misc.imresize(self.Ymat,(newHeight, newWidth), interp = 'nearest', mode = 'F')
+        imZ = misc.imresize(self.Zmat,(newHeight, newWidth), interp = 'nearest', mode = 'F')
+        
+        #Generate coordinate of the upped side of the image
+        coordUp = []
+        for i in range(imX.shape[1]-1): #horizontal
+            
+            cellIsZero = True
+            j = 0
+            
+            while (cellIsZero == True) and (j<imX.shape[0]-1):
+        
+                if imX[j,i]!= 0 and imY[j,i]!=0 and imZ[j,i]!=0:
+        
+                    cellIsZero = False
+                    coordUp.append((imX[j,i],imY[j,i]))
+                j+=1
+        coordUp = np.asarray(coordUp)
+        
+        #Generate coordinates of the right side of the image
+        coordRight = []
+        for j in range(imX.shape[0]): #Vertical
+            i = imX.shape[1]-1
+            if imX[j,i] == 0:
+                pass
+            else:
+                coordRight.append((imX[j,i],imY[j,i]))
+        coordRight = np.asarray(coordRight)
+        
+        #Generate coordinates of the left side of the image
+        coordLeft = []
+        for j in range(imX.shape[0]): #Vertical
+            i = 0
+            if imX[j,i] == 0:
+                pass
+            else:
+                coordLeft.append((imX[j,i],imY[j,i]))
+        coordLeft = np.asarray(coordLeft)
+        
+        #Generate coordinates of the bottom of the image
+        coordDown = []
+        for i in range(imX.shape[1]): #Horizontal
+            j = imX.shape[0]-1
+            if imX[j,i] == 0:
+                pass
+            else:
+                coordDown.append((imX[j,i],imY[j,i]))
+        coordDown = np.asarray(coordDown)
+        
+        #Stack and flip them to generate the polygon
+        if coordRight.shape[0] == 0:
+            ur = coordUp
+        else:
+            ur = np.vstack((coordUp, coordRight))
+            
+        if coordLeft.shape[0] == 0:
+            dl = np.flipud(coordDown)
+        else:
+            dl = np.vstack((np.flipud(coordDown), np.flipud(coordLeft)))
+        fp = np.vstack((ur,dl))
+        
+        #plt.plot(fp[:,0], fp[:,1], 'b')
+        #plt.show()
+        
+        #Generate Footprint
+        ###################
+        
+        # Create ring
+        ring = ogr.Geometry(ogr.wkbLinearRing)
+        for i in range(fp.shape[0]):
+            ring.AddPoint(float(fp[i,0]), float(fp[i,1]))
+        ring.AddPoint(float(fp[0,0]), float(fp[0,1]))
+        
+        # Create polygon
+        poly = ogr.Geometry(ogr.wkbPolygon)
+        poly.AddGeometry(ring)
+        
+        # Save extent to a new Shapefile
+        path = self.pathToData + "/footprint.shp"
+        shapeSaveName = QtGui.QFileDialog.getSaveFileName(self, "Save Footprint" ,path, "Shape file (*.shp)");
+        if shapeSaveName:
+
+            
+            outShapefile = shapeSaveName
+            outDriver = ogr.GetDriverByName("ESRI Shapefile")
+            
+            # Remove output shapefile if it already exists
+            if os.path.exists(outShapefile):
+                outDriver.DeleteDataSource(outShapefile)
+            
+            # Create the output shapefile
+            outDataSource = outDriver.CreateDataSource(outShapefile)
+            
+            #Create projection
+            footprintSRS = osr.SpatialReference()
+            epsg = int(self.crs.authid().split(':')[1])
+            footprintSRS.ImportFromEPSG(epsg)#2056)
+            
+            outLayer = outDataSource.CreateLayer("footprint", footprintSRS, geom_type = ogr.wkbPolygon)
+            
+            # Add an ID field
+            idField = ogr.FieldDefn("id", ogr.OFTInteger)
+            outLayer.CreateField(idField)
+            
+            # Create the feature and set values
+            featureDefn = outLayer.GetLayerDefn()
+            feature = ogr.Feature(featureDefn)
+            feature.SetGeometry(poly)
+            feature.SetField("id", 1)
+            outLayer.CreateFeature(feature)
+            
+            # Close DataSource
+            outDataSource.Destroy()
+        
+#        #Generate visibility mask
+#        #########################
+#        
+#        #Create array of points
+#        Xline = imX.reshape((1,imX.shape[0]*imX.shape[1]))
+#        Yline = imY.reshape((1,imY.shape[0]*imY.shape[1]))
+#        
+#        
+#        Xline = Xline[0, 0::2]#np.uint32(
+#        Yline = Yline[0, 0::2]#)np.uint32(
+#        points = np.vstack((Xline, Yline))
+#        
+#        #Get index of zero values
+#        idno0 = np.nonzero(Xline!=0)[0]
+#        #points = points[idno0,:]
+#        
+#        #Put the points in a KDTres
+#        treeIm = KDTree(points.T)
+#        
+#        #Generate coordinates of the ortho
+#        Xmax = np.max(Xline[idno0])
+#        Ymax = np.max(Yline[idno0])
+#        Xmin = np.min(Xline[idno0])
+#        Ymin = np.min(Yline[idno0])
+#        
+#        resol = 2 #Ask resolution!
+#        maxDist = resol
+#        
+#        #Compute coordinates of the pixels
+#        xx, yy = np.meshgrid(np.arange(Xmin,Xmax,resol), np.arange(Ymin,Ymax,resol))
+#        
+#        XorthoLine = xx.reshape((1, xx.shape[0]*xx.shape[1]))
+#        YorthoLine = yy.reshape((1, yy.shape[0]*yy.shape[1]))
+#        
+#        pointsOrtho = np.vstack((XorthoLine, YorthoLine))
+#        
+#        #Detect the closest image pixel in the map plane
+#        dist, index = treeIm.query(pointsOrtho.T, k=1, distance_upper_bound = maxDist)
+#        
+#        idInf = np.nonzero(dist==np.inf)[0]
+#        dist[idInf]= maxDist
+#        
+#        boolLine = np.zeros(dist.shape, dtype=np.uint16)
+#        boolLine[idInf] = 1
+#        boolMat = boolLine.reshape((xx.shape[0], yy.shape[1]))
+#        
+#        #plt.imshow(boolMat, interpolation = 'None')
+#        #plt.colorbar()
+#        #plt.show()
+#        distMat = dist.reshape((xx.shape[0], yy.shape[1]))
+#        
+#        cols = distMat.shape[1]
+#        rows = distMat.shape[0]
+#        
+#        #distMat = np.float64(distMat)
+#        originX = Xmin
+#        originY = Ymin
+#        pixelWidth = resol
+#        pixelHeight = resol
+#        
+#        # Save extent to a new Shapefile
+#        path = self.pathToData + "/mask.tif"
+#        rasterSaveName = QtGui.QFileDialog.getSaveFileName(self, "Save Mask" ,path, "Raster (*.tif)");
+#        if rasterSaveName:
+#            #rasterPath = self.pathToData+"/distance.tif"
+#            
+#            driver = gdal.GetDriverByName('GTiff')
+#            outRaster = driver.Create(rasterSaveName, cols, rows, 1, gdal.GDT_UInt16)
+#            outRaster.SetGeoTransform((originX, pixelWidth, 0, originY, 0, pixelHeight))
+#            outband = outRaster.GetRasterBand(1)
+#            outband.WriteArray(boolMat)
+#            outRasterSRS = osr.SpatialReference()
+#            outRasterSRS.ImportFromEPSG(self.crs.srsid())#2056)
+#            outRaster.SetProjection(outRasterSRS.ExportToWkt())
+#            outband.FlushCache()
+        
+#        dst_layername = self.pathToData+"/_footprint_full.shp"
+#        drv = ogr.GetDriverByName("ESRI Shapefile")
+#
+#        if os.path.exists(dst_layername):
+#            drv.DeleteDataSource(dst_layername)
+#        #print dst_layername
+#        
+#        dst_ds = drv.CreateDataSource(dst_layername)
+#        dst_layer = dst_ds.CreateLayer(dst_layername, srs = None)#geom_type=ogr.wkbPolygon)
+#        
+#        newField = ogr.FieldDefn('MYFLD', ogr.OFTInteger)
+#        dst_layer.CreateField(newField)
+#        
+#        #print '3'
+#        #gdal.Polygonize(band, None, outLayer, 0, [], callback=None )
+#        gdal.Polygonize(outband, None, dst_layer, 0, [], callback=None )
+#        
+#            outRaster = None
+#        dst_ds.Destroy()
+        self.noSave = False
+        
+    def saveXYZmatrix(self):
+                
+         #Unprojection
+        A = np.dot(self.qgl_window.modelview, self.qgl_window.projection)
+        m = np.linalg.pinv(A).transpose()
+        
+        #Get z_buffer of the middle column
+        zMat = glReadPixels(0, 0, self.qgl_window.viewport[2], self.qgl_window.viewport[3], GL_DEPTH_COMPONENT, GL_FLOAT);
+        zLine = np.reshape(zMat, (1, zMat.shape[0]*zMat.shape[1]))
+        zMat2 = np.fliplr(np.reshape(zLine, (zMat.shape[0],zMat.shape[1]), order = 'F')).T
+        
+        x = np.arange(self.qgl_window.viewport[2])#width
+        y = np.arange(self.qgl_window.viewport[3])#heigth
+        
+        xMat,yMat = np.meshgrid(x,y)
+        
+        #xMat = np.fliplr(xMat)
+        yMat = np.flipud(yMat)
+        
+        zLine = np.reshape(zMat2, (1, zMat.shape[0]*zMat.shape[1]))
+        xLine = np.reshape(xMat, (1, xMat.shape[0]*xMat.shape[1]))
+        yLine = np.reshape(yMat, (1, yMat.shape[0]*yMat.shape[1]))
+        
+        
+        #Compute z-buffer coordinates
+        inP = np.zeros((xLine.shape[1],4))
+        inP[:,0] = (xLine-np.float32(self.qgl_window.viewport[0]))/self.qgl_window.viewport[2]*2.0-1.0
+        inP[:,1] = (yLine-np.float32(self.qgl_window.viewport[1]))/self.qgl_window.viewport[3]*2.0-1.0
+        inP[:,2] = 2.0*zLine-1.0
+        inP[:,3] = np.ones(xLine.shape)
+        
+        #Compute world coordinates
+        outP = np.dot(m,inP.T)
+        outP = outP.T
+        outP[:,3]=1.0/outP[:,3];
+        outP[:,0]=outP[:,0]*outP[:,3];
+        outP[:,1]=outP[:,1]*outP[:,3];
+        outP[:,2]=outP[:,2]*outP[:,3];
+                
+        res = outP[:,0:3]
+        
+        #Filter according to DEM bbox
+        idsBool = (res[:,1] > self.demMax) | (res[:,1] < self.demMin) | (-res[:,0] > self.dem_box.xMaximum()) | (-res[:,0] < self.dem_box.xMinimum()) |(res[:,2] > self.dem_box.yMaximum()) | (res[:,2] < self.dem_box.yMinimum())
+        res[idsBool] = 0
+    
+        X = -res[:,0]#outP[:,0]
+        X = np.reshape(X, (zMat.shape[0], zMat.shape[1]), order = 'F').T
+        self.Xmat = X
+        
+        Z = res[:,1]#outP[:,1]
+        Z = np.reshape(Z, (zMat.shape[0], zMat.shape[1]), order = 'F').T
+        self.Zmat = Z
+        
+        Y = res[:,2]#outP[:,2]
+        Y = np.reshape(Y, (zMat.shape[0], zMat.shape[1]), order = 'F').T
+        self.Ymat = Y
+        
+            
+        if self.noSave == False:
+        
+            path = self.pathToData + "/X.tif"
+            imageSaveName = QtGui.QFileDialog.getSaveFileName(self, "Save X" ,path,"Images (*.tif)");
+            if imageSaveName:
+                Image.fromarray(X).save(imageSaveName)
+            
+            index = imageSaveName.rfind("/")
+            path = imageSaveName[0:index]+ "/Y.tif"
+            imageSaveName = QtGui.QFileDialog.getSaveFileName(self, "Save Y" ,path,"Images (*.tif)");
+            if imageSaveName:
+                Image.fromarray(Y).save(imageSaveName)
+            
+            index = imageSaveName.rfind("/")
+            path = imageSaveName[0:index]+ "/Z.tif"
+            imageSaveName = QtGui.QFileDialog.getSaveFileName(self, "Save Z" ,path,"Images (*.tif)");
+            if imageSaveName:
+                Image.fromarray(Z).save(imageSaveName)
+                
+
+        
+        
+#    def activatePolygonVisualization(self):
+#        if self.polygonActivated == False:
+#            self.polygonActivated = True
+#            self.qgl_window.polygonActivated = True
+#            self.ui.activatePolygon.setText('Disable Polygons')
+#        elif self.polygonActivated == True:
+#            self.polygonActivated = False
+#            self.qgl_window.polygonActivated = False
+#            self.ui.activatePolygon.setText('Enable Polygons')
         
     def changeTransparency(self, val):
         self.qgl_window.transparency = val*50
@@ -155,6 +653,7 @@ class MonoplotterMainWindow(QtGui.QMainWindow):
         self.qgl_window.updateGL()
     
     def getOrtho(self, forPolygon = False):
+        
         zBuffer = self.qgl_window.getZBuffer()
         zBuffer = zBuffer.reshape((self.qgl_window.viewport[3],self.qgl_window.viewport[2]))
         zBuffer = zBuffer.T
@@ -232,9 +731,17 @@ class MonoplotterMainWindow(QtGui.QMainWindow):
                 bar.progressBar.setValue(r)
                 
         self.texture = texture
+        
+        #Get XYZ coordinates
+        print 'Get XYZ coordinates with saveXYZ function'
+        self.noSave=True
+        self.saveXYZmatrix()
+        
         # Create the drapping window
         if not forPolygon:
             self.openOrtho.emit()
+            
+
             
         
     def resizeMonoplotter(self):

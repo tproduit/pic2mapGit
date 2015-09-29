@@ -12,7 +12,7 @@ from OpenGL.GL import *
 from PyQt4 import QtGui
 from PyQt4.QtGui import *
 from PyQt4.QtCore import *
-from numpy import array, zeros, size, repeat, float32, uint32
+from numpy import array, zeros, size, repeat, float32, uint32, max, min
 from osgeo import gdal
 from ui_buffering import Ui_progressBar
 import operator
@@ -57,6 +57,9 @@ class Buffers(QtGui.QWidget):
                 raise ValueError
             
             self.dem_box = [box[0]+resolution1/2, box[1]+resolution1/2, box[2]-resolution1/2, box[3]-resolution1/2]
+            self.demMax = max(imarray)
+            self.demMin = min(imarray)
+            
             res = resolution1
             self.res = res
     

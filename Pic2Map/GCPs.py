@@ -10,6 +10,8 @@
 # the GNU General Public License for more details.
 
 import platform
+import csv
+
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
 
@@ -173,33 +175,63 @@ class GCPTableModel(QAbstractTableModel):
         print "load"
         exception = None
         fh = None
+        
+        
         try:
             if not filename:
                 raise IOError, "no filename specified for loading"
-            fh = QFile(filename)
-            if not fh.open(QIODevice.ReadOnly):
-                raise IOError, unicode(fh.errorString())
-            stream = QDataStream(fh)
-            magic = stream.readInt32()
-            if magic != MAGIC_NUMBER:
-                raise IOError, "unrecognized file type"
-            fileVersion = stream.readInt16()
-            if fileVersion != FILE_VERSION:
-                raise IOError, "unrecognized file type version"
-            self.GCPs = []
-            while not stream.atEnd():
-                picture_i = stream.readQVariant()
-                picture_j = stream.readQVariant()
-                local_x = stream.readQVariant()
-                local_y = stream.readQVariant()
-                local_z  = stream.readQVariant()
-                self.GCPs.append(GCP(picture_i,picture_j,local_x,local_y,local_z))
-                self.pictures_i.add(picture_i)
-                self.pictures_j.add(picture_j)
-                self.locals_x.add(local_x)
-                self.locals_y.add(local_y)
-                self.locals_z.add(local_z)
-            self.dirty = False
+            
+            elif filename.find('.dat') != -1:
+                fh = QFile(filename)
+                if not fh.open(QIODevice.ReadOnly):
+                    raise IOError, unicode(fh.errorString())
+                stream = QDataStream(fh)
+                magic = stream.readInt32()
+                if magic != MAGIC_NUMBER:
+                    raise IOError, "unrecognized file type"
+                fileVersion = stream.readInt16()
+                if fileVersion != FILE_VERSION:
+                    raise IOError, "unrecognized file type version"
+                self.GCPs = []
+                while not stream.atEnd():
+                    picture_i = stream.readQVariant()
+                    picture_j = stream.readQVariant()
+                    local_x = stream.readQVariant()
+                    local_y = stream.readQVariant()
+                    local_z  = stream.readQVariant()
+                    self.GCPs.append(GCP(picture_i,picture_j,local_x,local_y,local_z))
+                    self.pictures_i.add(picture_i)
+                    self.pictures_j.add(picture_j)
+                    self.locals_x.add(local_x)
+                    self.locals_y.add(local_y)
+                    self.locals_z.add(local_z)
+                self.dirty = False
+                
+            elif filename.find('.csv') != -1:
+                f = open(filename, 'rb')
+                try:
+                    gcpReader = csv.reader(f)
+                    
+                    i= 0
+                    for row in gcpReader:
+                        if i!=0:
+                            picture_i = float(row[0])
+                            picture_j = float(row[1])
+                            local_x = float(row[2])
+                            local_y = float(row[3])
+                            local_z  = float(row[4])
+                            
+                            self.GCPs.append(GCP(picture_i,picture_j,local_x,local_y,local_z))
+                            self.pictures_i.add(picture_i)
+                            self.pictures_j.add(picture_j)
+                            self.locals_x.add(local_x)
+                            self.locals_y.add(local_y)
+                            self.locals_z.add(local_z)
+                        i+=1
+
+                finally:
+                    f.close()
+                
         except IOError, e:
             exception = e
         finally:
@@ -236,6 +268,19 @@ class GCPTableModel(QAbstractTableModel):
                 fh.close()
             if exception is not None:
                 raise exception
+                
+        #Save as CSV
+        ############
+        filename = filename.replace('.dat','.csv')
+        f = open(filename, 'wb')
+        try:
+            writer = csv.writer(f)
+            writer.writerow( ('line', 'column', 'X', 'Y', 'Z') )
+            for GCP in self.GCPs:
+                writer.writerow( (GCP.picture_i, GCP.picture_j, GCP.local_x, GCP.local_y, GCP.local_z) )
+        finally:
+            f.close()
+        
 
     def checkValid(self,rowIndex):
         valid = 1
